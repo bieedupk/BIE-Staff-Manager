@@ -1,0 +1,16 @@
+{
+  "name": "BIE Staff Manager",
+  "short_name": "BIE Staff",
+  "description": "Staff attendance, tasks, leave and reports for Board of Islamic Education.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f8fafc",
+  "theme_color": "#0f604b",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}

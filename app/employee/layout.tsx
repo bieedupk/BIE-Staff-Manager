@@ -1,0 +1,41 @@
+import { AppShell } from "@/components/layout/app-shell";
+import { currentDeviceRequestInfo, unauthorizedDeviceMessage, verifyEmployeeDeviceAccess } from "@/lib/authorized-devices";
+import { requireEmployeeProfile } from "@/lib/auth";
+import { getLocale, t } from "@/lib/i18n";
+
+const employeeNav = [
+  ["/employee/dashboard", "dashboard"],
+  ["/employee/attendance", "attendance"],
+  ["/employee/tasks", "tasks"],
+  ["/employee/daily-report", "dailyReports"],
+  ["/employee/leave", "leaves"],
+  ["/employee/profile", "profile"]
+] as const;
+
+export default async function EmployeeLayout({ children }: { children: React.ReactNode }) {
+  const profile = await requireEmployeeProfile();
+  const locale = await getLocale();
+  const deviceAccess = await verifyEmployeeDeviceAccess(profile, await currentDeviceRequestInfo(), {
+    logMobileBlocked: true
+  });
+
+  return (
+    <AppShell
+      profile={profile}
+      locale={locale}
+      signOutLabel={t("signOut", locale)}
+      nav={employeeNav.map(([href, label]) => ({ href, label: t(label, locale) }))}
+    >
+      {deviceAccess.allowed ? children : <EmployeeAccessBlocked message={deviceAccess.message ?? unauthorizedDeviceMessage} />}
+    </AppShell>
+  );
+}
+
+function EmployeeAccessBlocked({ message }: { message: string }) {
+  return (
+    <section className="rounded-lg border border-red-200 bg-white p-5 shadow-soft">
+      <h1 className="text-lg font-extrabold text-slate-950">Access blocked</h1>
+      <p className="mt-2 text-sm font-semibold text-red-700">{message}</p>
+    </section>
+  );
+}
