@@ -2,6 +2,7 @@ import Link from "next/link";
 import { LayoutDashboard } from "lucide-react";
 import { LanguageToggle } from "@/components/layout/language-toggle";
 import { SignOutButton } from "@/components/layout/sign-out-button";
+import { departmentDisplayName } from "@/lib/department-utils";
 import type { Locale } from "@/lib/i18n";
 import type { Profile } from "@/lib/types";
 import { roleLabel } from "@/lib/utils";
@@ -28,7 +29,7 @@ export function AppShell({ children, profile, nav, locale, signOutLabel, headerW
         <div className="mt-6 rounded-lg bg-emerald-50 p-3">
           <p className="font-bold text-slate-950">{profile.full_name}</p>
           <p className="text-sm font-medium text-slate-600">{roleLabel(profile.role)}</p>
-          <p className="text-xs text-slate-500">{profile.department}</p>
+          <p className="text-xs text-slate-500">{departmentDisplayName(profile.department)}</p>
         </div>
         <nav className="mt-6 grid gap-1">
           {nav.map((item) => (

@@ -18,7 +18,7 @@ export default async function AdminTasksPage() {
       .select("*, assignee:profiles!tasks_assigned_to_fkey(full_name, department), assigner:profiles!tasks_assigned_by_fkey(full_name)")
       .order("created_at", { ascending: false }),
     supabase.from("profiles").select("*").eq("role", "employee").eq("status", "active").order("full_name"),
-    supabase.from("departments").select("*").eq("is_active", true).order("name")
+    supabase.from("departments").select("*").eq("is_active", true).order("sort_order", { ascending: true, nullsFirst: false }).order("name")
   ]);
 
   const taskList = (tasks ?? []) as Task[];

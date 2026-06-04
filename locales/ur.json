@@ -31,6 +31,18 @@
   "reject": "رد",
   "status": "حالت",
   "department": "شعبہ",
+  "selectDepartments": "شعبہ جات منتخب کریں",
+  "other": "دیگر",
+  "writeDepartmentName": "شعبہ کا نام لکھیں",
+  "finance": "مالیات",
+  "administration": "انتظامیہ",
+  "admissionsRegistration": "داخلہ و رجسٹریشن",
+  "mailDispatch": "ڈاک و ترسیل",
+  "examinations": "امتحانات",
+  "paperSetting": "پرچہ سازی",
+  "research": "تحقیق",
+  "informationTechnologyIt": "انفارمیشن ٹیکنالوجی (آئی ٹی)",
+  "teaching": "تدریس",
   "role": "کردار",
   "supervisor": "نگران",
   "presentToday": "آج حاضر",
@@ -39,5 +51,6 @@
   "pendingTasks": "زیر التوا کام",
   "completedTasks": "مکمل کام",
   "overdueTasks": "تاخیر شدہ کام",
-  "pendingLeaves": "زیر التوا رخصت"
+  "pendingLeaves": "زیر التوا رخصت",
+  "syllabus": "نصاب"
 }

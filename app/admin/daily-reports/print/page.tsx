@@ -2,6 +2,7 @@ import { Star } from "lucide-react";
 import { PrintButton } from "@/app/admin/daily-reports/print/print-button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { requireAdminProfile } from "@/lib/auth";
+import { departmentTextForProfile, fetchEmployeeDepartmentsByEmployee } from "@/lib/employee-departments";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import type { AttendanceRecord, DailyReport } from "@/lib/types";
@@ -22,7 +23,7 @@ export default async function DailyReportsPrintPage({ searchParams }: Props) {
   const supabase = isAdminManagerRole(profile.role) ? createAdminClient() : await createClient();
   let reportQuery = supabase
     .from("daily_reports")
-    .select("*, profiles(full_name, department, designation)")
+    .select("*, profiles(id, full_name, department, department_id, designation)")
     .eq("report_date", reportDate)
     .order("created_at", { ascending: false });
   if (statusFilter !== "all") reportQuery = reportQuery.eq("review_status", statusFilter);
@@ -30,6 +31,7 @@ export default async function DailyReportsPrintPage({ searchParams }: Props) {
   const { data } = await reportQuery;
   const reports = (data ?? []) as DailyReport[];
   const employeeIds = [...new Set(reports.map((report) => report.employee_id))];
+  const assignmentsByEmployee = await fetchEmployeeDepartmentsByEmployee(supabase, employeeIds);
   const { data: attendanceRows } = employeeIds.length
     ? await supabase.from("attendance").select("*").eq("work_date", reportDate).in("employee_id", employeeIds)
     : { data: [] as AttendanceRecord[] };
@@ -74,7 +76,7 @@ export default async function DailyReportsPrintPage({ searchParams }: Props) {
                 <div>
                   <h2>{report.profiles?.full_name || "Employee"}</h2>
                   <p>
-                    {report.profiles?.department || "-"} | {report.profiles?.designation || "-"}
+                    {report.profiles ? departmentTextForProfile(report.profiles, assignmentsByEmployee, "-") : "-"} | {report.profiles?.designation || "-"}
                   </p>
                 </div>
                 <div className="report-hours">

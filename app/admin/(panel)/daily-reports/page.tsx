@@ -5,6 +5,7 @@ import { ResetTestReportButton } from "@/app/admin/daily-reports/reset-test-repo
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
 import { requireAdminProfile } from "@/lib/auth";
+import { departmentTextForProfile, fetchEmployeeDepartmentsByEmployee } from "@/lib/employee-departments";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import type { AttendanceRecord, DailyReport, Department, Profile } from "@/lib/types";
@@ -38,7 +39,7 @@ export default async function AdminDailyReportsPage({ searchParams }: Props) {
 
   const [{ data: employees }, { data: departments }] = await Promise.all([
     lookupSupabase.from("profiles").select("*").eq("role", "employee").eq("status", "active").order("full_name"),
-    lookupSupabase.from("departments").select("*").eq("is_active", true).order("name")
+    lookupSupabase.from("departments").select("*").eq("is_active", true).order("sort_order", { ascending: true, nullsFirst: false }).order("name")
   ]);
 
   let rawReportsQuery = reportSupabase
@@ -77,21 +78,26 @@ export default async function AdminDailyReportsPage({ searchParams }: Props) {
   const { data: reportProfileRows, error: reportProfilesError } = reportProfileIds.length
     ? await lookupSupabase
         .from("profiles")
-        .select("id, full_name, department, designation")
+        .select("id, full_name, department, department_id, designation")
         .in("id", reportProfileIds)
-    : { data: [] as Array<Pick<Profile, "id" | "full_name" | "department" | "designation">>, error: null };
+    : { data: [] as Array<Pick<Profile, "id" | "full_name" | "department" | "department_id" | "designation">>, error: null };
   const reportProfilesById = new Map(
-    ((reportProfileRows ?? []) as Array<Pick<Profile, "id" | "full_name" | "department" | "designation">>).map((employee) => [
+    ((reportProfileRows ?? []) as Array<Pick<Profile, "id" | "full_name" | "department" | "department_id" | "designation">>).map((employee) => [
       employee.id,
       employee
     ])
   );
+  const assignmentsByEmployee = await fetchEmployeeDepartmentsByEmployee(lookupSupabase, reportProfileIds);
   const enrichedReports = rawReportRows.map((report) => ({
     ...report,
     profiles: reportProfilesById.get(report.employee_id) ?? null
   })) as DailyReport[];
   let reports = enrichedReports;
-  if (departmentFilter) reports = reports.filter((report) => report.profiles?.department === departmentFilter);
+  if (departmentFilter) {
+    reports = reports.filter(
+      (report) => report.profiles && departmentTextForProfile(report.profiles, assignmentsByEmployee, "").split(", ").includes(departmentFilter)
+    );
+  }
 
   if (process.env.NODE_ENV !== "production") {
     console.info("[daily-reports:admin]", {
@@ -220,7 +226,7 @@ export default async function AdminDailyReportsPage({ searchParams }: Props) {
                   <div>
                     <h2 className="font-extrabold text-slate-950">{report.profiles?.full_name || "Unknown employee"}</h2>
                     <p className="text-sm font-medium text-slate-500">
-                      {report.profiles?.department || "Not assigned"} | {report.profiles?.designation || "-"} | {formatDate(report.report_date)} |
+                      {report.profiles ? departmentTextForProfile(report.profiles, assignmentsByEmployee) : "Not assigned"} | {report.profiles?.designation || "-"} | {formatDate(report.report_date)} |
                       Attendance: {report.hours_worked} hrs
                     </p>
                   </div>

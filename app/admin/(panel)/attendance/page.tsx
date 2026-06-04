@@ -3,6 +3,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { requireAdminProfile } from "@/lib/auth";
+import { departmentTextForProfile, fetchEmployeeDepartmentsByEmployee } from "@/lib/employee-departments";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import type { AttendanceRecord, Profile } from "@/lib/types";
@@ -28,7 +29,7 @@ export default async function AdminAttendancePage({ searchParams }: Props) {
 
   let attendanceQuery = supabase
     .from("attendance")
-    .select("*, profiles(full_name, department, designation)")
+    .select("*, profiles(id, full_name, department, department_id, designation)")
     .eq("work_date", selectedDate)
     .order("check_in_at", { ascending: false });
 
@@ -53,6 +54,10 @@ export default async function AdminAttendancePage({ searchParams }: Props) {
 
   const employees = (profiles ?? []) as Profile[];
   const selectedAttendance = (attendanceRows ?? []) as AttendanceRecord[];
+  const assignmentsByEmployee = await fetchEmployeeDepartmentsByEmployee(supabase, [
+    ...employees.map((employee) => employee.id),
+    ...selectedAttendance.map((record) => record.employee_id)
+  ]);
   const presentIds = new Set(selectedAttendance.map((record) => record.employee_id));
   const absentEmployees = employees.filter((employee) => !presentIds.has(employee.id));
 
@@ -116,7 +121,12 @@ export default async function AdminAttendancePage({ searchParams }: Props) {
             {statusFilter === "Absent" ? (
               absentEmployees.length ? (
                 absentEmployees.map((employee) => (
-                  <AttendanceEmployeeCard key={employee.id} name={employee.full_name} department={employee.department} status="Absent" />
+                  <AttendanceEmployeeCard
+                    key={employee.id}
+                    name={employee.full_name}
+                    department={departmentTextForProfile(employee, assignmentsByEmployee, "-")}
+                    status="Absent"
+                  />
                 ))
               ) : (
                 <EmptyState message="No absent employees today." />
@@ -128,7 +138,7 @@ export default async function AdminAttendancePage({ searchParams }: Props) {
                     <div>
                       <p className="font-extrabold text-slate-950">{record.profiles?.full_name || "Employee"}</p>
                       <p className="text-sm font-medium text-slate-500">
-                        {record.profiles?.department || "-"} | {record.profiles?.designation || "-"}
+                        {record.profiles ? departmentTextForProfile(record.profiles, assignmentsByEmployee, "-") : "-"} | {record.profiles?.designation || "-"}
                       </p>
                     </div>
                     <StatusBadge tone="attendance">{record.status}</StatusBadge>
@@ -159,7 +169,7 @@ function attendanceStatusPath(status: string, employee: string, date: string) {
   return `/admin/attendance?${params.toString()}`;
 }
 
-function AttendanceEmployeeCard({ name, department, status }: { name: string; department: string | null; status: "Absent" }) {
+function AttendanceEmployeeCard({ name, department, status }: { name: string; department: string; status: "Absent" }) {
   return (
     <article className="rounded-lg border border-slate-200 p-3">
       <div className="flex items-start justify-between gap-3">

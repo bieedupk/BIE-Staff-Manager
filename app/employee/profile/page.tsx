@@ -1,9 +1,13 @@
 import { PageHeader } from "@/components/ui/page-header";
 import { requireEmployeeProfile } from "@/lib/auth";
+import { departmentTextForProfile, fetchEmployeeDepartmentsByEmployee } from "@/lib/employee-departments";
+import { createClient } from "@/lib/supabase/server";
 import { formatDate } from "@/lib/utils";
 
 export default async function EmployeeProfilePage() {
   const profile = await requireEmployeeProfile();
+  const supabase = await createClient();
+  const assignmentsByEmployee = await fetchEmployeeDepartmentsByEmployee(supabase, [profile.id]);
 
   return (
     <>
@@ -14,7 +18,7 @@ export default async function EmployeeProfilePage() {
           <ProfileItem label="Email" value={profile.email} />
           <ProfileItem label="Phone" value={profile.phone || "-"} />
           <ProfileItem label="Role" value={profile.role} />
-          <ProfileItem label="Department" value={profile.department || "-"} />
+          <ProfileItem label="Department" value={departmentTextForProfile(profile, assignmentsByEmployee, "-")} />
           <ProfileItem label="Designation" value={profile.designation || "-"} />
           <ProfileItem label="Joining date" value={formatDate(profile.joining_date)} />
           <ProfileItem label="Status" value={profile.status} />

@@ -31,6 +31,18 @@
   "reject": "Reject",
   "status": "Status",
   "department": "Department",
+  "selectDepartments": "Select departments",
+  "other": "Other",
+  "writeDepartmentName": "Write department name",
+  "finance": "Finance",
+  "administration": "Administration",
+  "admissionsRegistration": "Admissions & Registration",
+  "mailDispatch": "Mail & Dispatch",
+  "examinations": "Examinations",
+  "paperSetting": "Paper Setting",
+  "research": "Research",
+  "informationTechnologyIt": "Information Technology (IT)",
+  "teaching": "Teaching",
   "role": "Role",
   "supervisor": "Supervisor",
   "presentToday": "Present Today",
@@ -39,5 +51,6 @@
   "pendingTasks": "Pending Tasks",
   "completedTasks": "Completed Tasks",
   "overdueTasks": "Overdue Tasks",
-  "pendingLeaves": "Pending Leave Requests"
+  "pendingLeaves": "Pending Leave Requests",
+  "syllabus": "Syllabus"
 }

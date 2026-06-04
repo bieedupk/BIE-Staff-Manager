@@ -4,10 +4,11 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { logAudit } from "@/app/actions/audit";
 import { requireAdminProfile } from "@/lib/auth";
+import { departmentDisplayName } from "@/lib/department-utils";
 import { ensureDefaultDepartments } from "@/lib/default-departments";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
-import type { EmployeeStatus, Profile, UserRole } from "@/lib/types";
+import type { Department, EmployeeStatus, Profile, UserRole } from "@/lib/types";
 
 function requireAdminManager(role: UserRole) {
   if (role !== "super_admin" && role !== "admin") {
@@ -41,6 +42,66 @@ function normalizeEmployeeStatus(value: string): EmployeeStatus {
   throw new Error("Please select a valid status.");
 }
 
+function selectedDepartmentIds(formData: FormData) {
+  return [...new Set(formData.getAll("department_ids").map((value) => String(value)).filter(Boolean))];
+}
+
+async function resolveDepartmentSelection(formData: FormData) {
+  const departmentIds = selectedDepartmentIds(formData);
+  if (!departmentIds.length) throw new Error("Please select at least one department.");
+
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("departments")
+    .select("*")
+    .eq("is_active", true)
+    .in("id", departmentIds);
+
+  if (error) throw new Error(error.message);
+
+  const departments = (data ?? []) as Department[];
+  if (departments.length !== departmentIds.length) {
+    throw new Error("One or more selected departments were not found. Please refresh and try again.");
+  }
+
+  const departmentsById = new Map(departments.map((department) => [department.id, department]));
+  const orderedDepartments = departmentIds.map((id) => departmentsById.get(id)).filter((department): department is Department => Boolean(department));
+  const otherDepartment = orderedDepartments.find((department) => departmentDisplayName(department.name) === "Other");
+  const otherDepartmentText = String(formData.get("other_department") || "").trim();
+
+  if (otherDepartment && !otherDepartmentText) {
+    throw new Error("Write department name is required when Other is selected.");
+  }
+
+  return {
+    departments: orderedDepartments,
+    primaryDepartment: orderedDepartments[0],
+    otherDepartmentText: otherDepartment ? otherDepartmentText : null
+  };
+}
+
+async function replaceEmployeeDepartments(employeeId: string, departments: Department[], otherDepartmentText: string | null) {
+  const admin = createAdminClient();
+  const { error: deleteError } = await admin.from("employee_departments").delete().eq("employee_id", employeeId);
+
+  if (deleteError) {
+    throw new Error(deleteError.message);
+  }
+
+  const { error: insertError } = await admin.from("employee_departments").insert(
+    departments.map((department, index) => ({
+      employee_id: employeeId,
+      department_id: department.id,
+      other_department: departmentDisplayName(department.name) === "Other" ? otherDepartmentText : null,
+      is_primary: index === 0
+    }))
+  );
+
+  if (insertError) {
+    throw new Error(insertError.message);
+  }
+}
+
 export async function createEmployee(formData: FormData) {
   const currentProfile = await requireAdminProfile();
   let authUserId: string | null = null;
@@ -55,7 +116,6 @@ export async function createEmployee(formData: FormData) {
     const fullName = String(formData.get("full_name") || "").trim();
     const role = normalizeRole(String(formData.get("role") || "employee"));
     const status = normalizeEmployeeStatus(String(formData.get("status") || "active"));
-    const department = String(formData.get("department") || "").trim();
     const supervisorId = String(formData.get("supervisor_id") || "") || null;
 
     requireAssignableRole(currentProfile.role, role);
@@ -63,20 +123,9 @@ export async function createEmployee(formData: FormData) {
     if (!fullName) throw new Error("Full name is required.");
     if (!email) throw new Error("Email is required.");
     if (password.length < 6) throw new Error("Temporary password must be at least 6 characters.");
-    if (!department) throw new Error("Please select a department.");
     await ensureDefaultDepartments();
-
+    const { departments, primaryDepartment, otherDepartmentText } = await resolveDepartmentSelection(formData);
     const admin = createAdminClient();
-    const { data: selectedDepartment, error: departmentError } = await admin
-      .from("departments")
-      .select("id, name")
-      .eq("name", department)
-      .eq("is_active", true)
-      .single();
-
-    if (departmentError || !selectedDepartment) {
-      throw new Error("Selected department was not found. Please refresh and try again.");
-    }
 
     const { data: authData, error: authError } = await admin.auth.admin.createUser({
       email,
@@ -97,8 +146,8 @@ export async function createEmployee(formData: FormData) {
       email,
       phone: String(formData.get("phone") || "").trim() || null,
       role,
-      department: selectedDepartment.name,
-      department_id: selectedDepartment.id,
+      department: departmentDisplayName(primaryDepartment.name),
+      department_id: primaryDepartment.id,
       designation: String(formData.get("designation") || "").trim() || null,
       supervisor_id: supervisorId,
       joining_date: String(formData.get("joining_date") || "") || null,
@@ -110,6 +159,8 @@ export async function createEmployee(formData: FormData) {
       authUserId = null;
       throw new Error(profileError.message);
     }
+
+    await replaceEmployeeDepartments(authData.user.id, departments, otherDepartmentText);
 
     const { error: auditError } = await admin.from("audit_logs").insert({
       actor_id: currentProfile.id,
@@ -149,6 +200,8 @@ export async function updateEmployee(formData: FormData) {
     const role = normalizeRole(String(formData.get("role") || "employee"));
     const status = normalizeEmployeeStatus(String(formData.get("status") || "active"));
     requireAssignableRole(currentProfile.role, role);
+    await ensureDefaultDepartments();
+    const { departments, primaryDepartment, otherDepartmentText } = await resolveDepartmentSelection(formData);
 
     const admin = createAdminClient();
     const { data: existingProfile, error: existingError } = await admin
@@ -175,8 +228,8 @@ export async function updateEmployee(formData: FormData) {
         full_name: String(formData.get("full_name") || "").trim(),
         phone: String(formData.get("phone") || "").trim() || null,
         role,
-        department: String(formData.get("department") || "Other"),
-        department_id: String(formData.get("department_id") || "") || null,
+        department: departmentDisplayName(primaryDepartment.name),
+        department_id: primaryDepartment.id,
         designation: String(formData.get("designation") || "").trim() || null,
         supervisor_id: String(formData.get("supervisor_id") || "") || null,
         joining_date: String(formData.get("joining_date") || "") || null,
@@ -185,6 +238,8 @@ export async function updateEmployee(formData: FormData) {
       .eq("id", id);
 
     if (error) throw new Error(error.message);
+
+    await replaceEmployeeDepartments(id, departments, otherDepartmentText);
 
     const statusChanged = existingProfile.status !== status;
     const auditAction = statusChanged

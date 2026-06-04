@@ -37,7 +37,17 @@ export type Department = {
   id: string;
   name: string;
   is_active: boolean;
+  sort_order: number | null;
   created_at: string;
+};
+
+export type EmployeeDepartment = {
+  employee_id: string;
+  department_id: string;
+  other_department: string | null;
+  is_primary: boolean;
+  created_at: string;
+  departments?: Department | null;
 };
 
 export type AuthorizedDevice = {
@@ -63,7 +73,7 @@ export type AttendanceRecord = {
   total_hours: number | null;
   status: AttendanceStatus;
   created_at: string;
-  profiles?: Pick<Profile, "full_name" | "email" | "department" | "designation"> | null;
+  profiles?: Pick<Profile, "id" | "full_name" | "email" | "department" | "department_id" | "designation"> | null;
 };
 
 export type LeaveRequest = {
@@ -78,7 +88,7 @@ export type LeaveRequest = {
   reviewed_by: string | null;
   reviewed_at: string | null;
   created_at: string;
-  profiles?: Pick<Profile, "full_name" | "department"> | null;
+  profiles?: Pick<Profile, "id" | "full_name" | "department" | "department_id"> | null;
 };
 
 export type Task = {
@@ -95,7 +105,7 @@ export type Task = {
   completion_note: string | null;
   completed_at: string | null;
   created_at: string;
-  assignee?: Pick<Profile, "full_name" | "department"> | null;
+  assignee?: Pick<Profile, "id" | "full_name" | "department" | "department_id"> | null;
   assigner?: Pick<Profile, "full_name"> | null;
 };
 
@@ -115,7 +125,7 @@ export type DailyReport = {
   reviewed_by: string | null;
   reviewed_at: string | null;
   created_at: string;
-  profiles?: Pick<Profile, "full_name" | "department" | "designation"> | null;
+  profiles?: Pick<Profile, "id" | "full_name" | "department" | "department_id" | "designation"> | null;
 };
 
 export type AuditLog = {

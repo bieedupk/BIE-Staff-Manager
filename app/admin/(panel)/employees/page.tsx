@@ -1,10 +1,13 @@
 import { createEmployee, setEmployeeStatus, updateEmployee } from "@/app/actions/admin";
+import { DepartmentAssignmentFields } from "@/components/admin/department-assignment-fields";
 import { disableAuthorizedDevice, registerAuthorizedDevice, resetAuthorizedDevice } from "@/app/actions/devices";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { requireAdminProfile } from "@/lib/auth";
+import { departmentDisplayName } from "@/lib/department-utils";
 import { ensureDefaultDepartments } from "@/lib/default-departments";
+import { departmentNamesForProfile, fetchEmployeeDepartmentsByEmployee } from "@/lib/employee-departments";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import type { AuthorizedDevice, Department, Profile } from "@/lib/types";
@@ -50,7 +53,7 @@ export default async function AdminEmployeesPage({
   const supabase = canManageEmployees ? createAdminClient() : await createClient();
   const [{ data: profiles }, { data: departments }, { data: authorizedDevices }] = await Promise.all([
     supabase.from("profiles").select("*"),
-    supabase.from("departments").select("*").eq("is_active", true).order("name"),
+    supabase.from("departments").select("*").eq("is_active", true).order("sort_order", { ascending: true, nullsFirst: false }).order("name"),
     canManageEmployees
       ? supabase.from("authorized_devices").select("*").order("registered_at", { ascending: false })
       : Promise.resolve({ data: [] })
@@ -64,9 +67,14 @@ export default async function AdminEmployeesPage({
   const disabledEmployeeCount = allEmployees.filter((profile) => profile.status === "disabled").length;
   const employees = allEmployees.filter((profile) => statusFilter === "all" || profile.status === statusFilter);
   const activeDepartments = (departments ?? []) as Department[];
+  const assignmentsByEmployee = await fetchEmployeeDepartmentsByEmployee(
+    supabase,
+    allEmployees.map((employee) => employee.id)
+  );
   const supervisors = allEmployees.filter((profile) => ["super_admin", "admin", "supervisor"].includes(profile.role));
   const devices = (authorizedDevices ?? []) as AuthorizedDevice[];
   const devicesByEmployee = new Map<string, AuthorizedDevice[]>();
+  const defaultDepartmentId = activeDepartments.find((department) => departmentDisplayName(department.name) === "Administration")?.id;
 
   devices.forEach((device) => {
     const employeeDevices = devicesByEmployee.get(device.employee_id) ?? [];
@@ -105,16 +113,7 @@ export default async function AdminEmployeesPage({
           <Input name="joining_date" label="Joining date" type="date" />
           <Select name="role" label="Role" options={roles} />
           <Select name="status" label="Status" options={statuses} />
-          <label className="grid gap-1 text-sm font-bold text-slate-700">
-            Department
-            <select name="department" required defaultValue="Administration" className="min-h-11 rounded-lg border border-slate-300 px-3">
-              {activeDepartments.map((department) => (
-                <option key={department.id} value={department.name}>
-                  {department.name}
-                </option>
-              ))}
-            </select>
-          </label>
+          <DepartmentAssignmentFields departments={activeDepartments} selectedDepartmentIds={defaultDepartmentId ? [defaultDepartmentId] : []} />
           <label className="grid gap-1 text-sm font-bold text-slate-700">
             Supervisor
             <select name="supervisor_id" className="min-h-11 rounded-lg border border-slate-300 px-3">
@@ -166,7 +165,9 @@ export default async function AdminEmployeesPage({
                   <div className="mt-2 flex flex-wrap gap-2">
                     <StatusBadge>{roleLabel(employee.role)}</StatusBadge>
                     <StatusBadge tone="employee">{roleLabel(employee.status)}</StatusBadge>
-                    <StatusBadge>{employee.department || "Other"}</StatusBadge>
+                    {departmentNamesForProfile(employee, assignmentsByEmployee).map((departmentName) => (
+                      <StatusBadge key={departmentName}>{departmentName}</StatusBadge>
+                    ))}
                   </div>
                 </div>
                 {canManageEmployees ? (
@@ -193,16 +194,11 @@ export default async function AdminEmployeesPage({
                   <Input name="joining_date" label="Joining date" type="date" defaultValue={employee.joining_date ?? ""} />
                   <Select name="role" label="Role" options={roles} defaultValue={employee.role} />
                   <Select name="status" label="Status" options={statuses} defaultValue={employee.status} />
-                  <label className="grid gap-1 text-sm font-bold text-slate-700">
-                    Department
-                    <select name="department" defaultValue={employee.department || "Other"} className="min-h-11 rounded-lg border border-slate-300 px-3">
-                      {activeDepartments.map((department) => (
-                        <option key={department.id} value={department.name}>
-                          {department.name}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
+                  <DepartmentAssignmentFields
+                    departments={activeDepartments}
+                    selectedDepartmentIds={selectedDepartmentIds(employee, activeDepartments, assignmentsByEmployee)}
+                    otherDepartment={selectedOtherDepartment(employee, assignmentsByEmployee)}
+                  />
                   <label className="grid gap-1 text-sm font-bold text-slate-700">
                     Supervisor
                     <select name="supervisor_id" defaultValue={employee.supervisor_id ?? ""} className="min-h-11 rounded-lg border border-slate-300 px-3">
@@ -216,7 +212,6 @@ export default async function AdminEmployeesPage({
                         ))}
                     </select>
                   </label>
-                  <input name="department_id" type="hidden" value="" />
                   <p className="text-sm font-medium text-slate-500">Joined: {formatDate(employee.joining_date)}</p>
                   <div className="md:col-span-2 xl:col-span-3">
                     <button className="min-h-11 rounded-lg bg-bie-700 px-4 font-extrabold text-white">Save changes</button>
@@ -233,6 +228,32 @@ export default async function AdminEmployeesPage({
       </section>
     </>
   );
+}
+
+function selectedDepartmentIds(
+  employee: Profile,
+  departments: Department[],
+  assignmentsByEmployee: Map<string, import("@/lib/types").EmployeeDepartment[]>
+) {
+  const assignedDepartmentIds = (assignmentsByEmployee.get(employee.id) ?? []).map((assignment) => assignment.department_id);
+  if (assignedDepartmentIds.length) return assignedDepartmentIds;
+  if (employee.department_id) return [employee.department_id];
+
+  const matchingDepartment = departments.find((department) => departmentDisplayName(department.name) === departmentDisplayName(employee.department));
+  if (matchingDepartment) return [matchingDepartment.id];
+
+  const otherDepartment = departments.find((department) => departmentDisplayName(department.name) === "Other");
+  return otherDepartment ? [otherDepartment.id] : [];
+}
+
+function selectedOtherDepartment(employee: Profile, assignmentsByEmployee: Map<string, import("@/lib/types").EmployeeDepartment[]>) {
+  const otherAssignment = (assignmentsByEmployee.get(employee.id) ?? []).find(
+    (assignment) => departmentDisplayName(assignment.departments?.name) === "Other"
+  );
+
+  if (otherAssignment?.other_department) return otherAssignment.other_department;
+  if (employee.department && employee.department !== "Other") return employee.department;
+  return "";
 }
 
 function AuthorizedDevicePanel({ devices, employeeId }: { devices: AuthorizedDevice[]; employeeId: string }) {
