@@ -71,10 +71,10 @@ export default async function AdminDashboardPage() {
       <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         <StatCard label="Active employees" value={activeEmployeeCount} href="/admin/employees" />
         <StatCard label="Total staff records" value={staffRecords.length} href="/admin/employees" />
-        <StatCard label={t("presentToday", locale)} value={presentToday} href="/admin/attendance" />
-        <StatCard label={t("absentToday", locale)} value={absentToday} href="/admin/attendance" />
-        <StatCard label={t("lateToday", locale)} value={lateToday} href="/admin/attendance" />
-        <StatCard label="Half-day today" value={halfDayToday} href="/admin/attendance?status=Half+Day" />
+        <StatCard label={t("presentToday", locale)} value={presentToday} href="/admin/attendance?status=present" />
+        <StatCard label={t("absentToday", locale)} value={absentToday} href="/admin/attendance?status=absent" />
+        <StatCard label={t("lateToday", locale)} value={lateToday} href="/admin/attendance?status=late" />
+        <StatCard label="Half-day today" value={halfDayToday} href="/admin/attendance?status=half-day" />
         <StatCard label="Reports submitted today" value={reportEmployees.size} hint={formatDate(today)} href="/admin/daily-reports" />
         <StatCard label="Reports missing today" value={missingReports} href="/admin/daily-reports" />
         <StatCard label={t("pendingTasks", locale)} value={pendingTasks.count ?? 0} href="/admin/tasks" />
@@ -87,9 +87,9 @@ export default async function AdminDashboardPage() {
           <p className="mt-1 text-sm font-medium text-slate-500">Daily checks that need a manager&apos;s attention.</p>
         </div>
         <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
-          <ActionCount label="Absent employees" value={absentToday} href="/admin/attendance" />
-          <ActionCount label="Late employees" value={lateToday} href="/admin/attendance" />
-          <ActionCount label="Half-day employees" value={halfDayToday} href="/admin/attendance?status=Half+Day" />
+          <ActionCount label="Absent employees" value={absentToday} href="/admin/attendance?status=absent" />
+          <ActionCount label="Late employees" value={lateToday} href="/admin/attendance?status=late" />
+          <ActionCount label="Half-day employees" value={halfDayToday} href="/admin/attendance?status=half-day" />
           <ActionCount label="Missing daily reports" value={missingReports} href="/admin/daily-reports" />
           <ActionCount label="Pending leave requests" value={pendingLeaves.count ?? 0} href="/admin/leaves" />
           <ActionCount label="Overdue tasks" value={overdueTasks.count ?? 0} href="/admin/tasks" />

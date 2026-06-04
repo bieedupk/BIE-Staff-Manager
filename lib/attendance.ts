@@ -74,6 +74,27 @@ export function attendanceDisplayStatus(attendance: AttendanceRecord | null) {
   return "Checked In";
 }
 
+export function formatDurationFromHours(hours: number | null | undefined) {
+  if (hours === null || hours === undefined || Number.isNaN(Number(hours))) {
+    return "-";
+  }
+
+  const wholeHours = Math.trunc(Number(hours));
+  let minutes = Math.round((Number(hours) % 1) * 60);
+  let displayHours = wholeHours;
+
+  if (minutes === 60) {
+    displayHours += 1;
+    minutes = 0;
+  }
+
+  const parts: string[] = [];
+  if (displayHours > 0) parts.push(`${displayHours} ${displayHours === 1 ? "hr" : "hrs"}`);
+  if (minutes > 0 || !parts.length) parts.push(`${minutes} mins`);
+
+  return parts.join(" ");
+}
+
 export type AttendanceFlags = {
   isPresent: boolean;
   isLate: boolean;
