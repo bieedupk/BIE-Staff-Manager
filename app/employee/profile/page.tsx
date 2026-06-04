@@ -1,6 +1,7 @@
+import { DepartmentBadges } from "@/components/common/department-badges";
 import { PageHeader } from "@/components/ui/page-header";
 import { requireEmployeeProfile } from "@/lib/auth";
-import { getEmployeeDepartmentText } from "@/lib/employee-departments";
+import { getEmployeeDepartmentNames } from "@/lib/employee-departments";
 import { formatDate } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -8,7 +9,7 @@ export const revalidate = 0;
 
 export default async function EmployeeProfilePage() {
   const profile = await requireEmployeeProfile();
-  const departmentText = await getEmployeeDepartmentText(profile.id, profile.department);
+  const departments = await getEmployeeDepartmentNames(profile.id, profile.department);
 
   return (
     <>
@@ -19,7 +20,7 @@ export default async function EmployeeProfilePage() {
           <ProfileItem label="Email" value={profile.email} />
           <ProfileItem label="Phone" value={profile.phone || "-"} />
           <ProfileItem label="Role" value={profile.role} />
-          <ProfileItem label="Departments" value={departmentText} />
+          <ProfileItem label="Departments" value={<DepartmentBadges departments={departments} />} />
           <ProfileItem label="Designation" value={profile.designation || "-"} />
           <ProfileItem label="Joining date" value={formatDate(profile.joining_date)} />
           <ProfileItem label="Status" value={profile.status} />
@@ -29,7 +30,7 @@ export default async function EmployeeProfilePage() {
   );
 }
 
-function ProfileItem({ label, value }: { label: string; value: string }) {
+function ProfileItem({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div>
       <dt className="text-sm font-bold text-slate-500">{label}</dt>

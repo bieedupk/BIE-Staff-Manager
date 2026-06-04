@@ -1,7 +1,7 @@
 import { AppShell } from "@/components/layout/app-shell";
 import { currentDeviceRequestInfo, unauthorizedDeviceMessage, verifyEmployeeDeviceAccess } from "@/lib/authorized-devices";
 import { requireEmployeeProfile } from "@/lib/auth";
-import { getEmployeeDepartmentText } from "@/lib/employee-departments";
+import { getEmployeeDepartmentNames } from "@/lib/employee-departments";
 import { getLocale, t } from "@/lib/i18n";
 
 const employeeNav = [
@@ -19,7 +19,7 @@ export const revalidate = 0;
 export default async function EmployeeLayout({ children }: { children: React.ReactNode }) {
   const profile = await requireEmployeeProfile();
   const locale = await getLocale();
-  const departmentText = await getEmployeeDepartmentText(profile.id, profile.department);
+  const departments = await getEmployeeDepartmentNames(profile.id, profile.department);
   const deviceAccess = await verifyEmployeeDeviceAccess(profile, await currentDeviceRequestInfo(), {
     logMobileBlocked: true
   });
@@ -29,7 +29,7 @@ export default async function EmployeeLayout({ children }: { children: React.Rea
       profile={profile}
       locale={locale}
       signOutLabel={t("signOut", locale)}
-      departmentText={departmentText}
+      departments={departments}
       nav={employeeNav.map(([href, label]) => ({ href, label: t(label, locale) }))}
     >
       {deviceAccess.allowed ? children : <EmployeeAccessBlocked message={deviceAccess.message ?? unauthorizedDeviceMessage} />}

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { LiveClock } from "@/components/layout/live-clock";
 import { StatCard } from "@/components/ui/stat-card";
+import { deriveAttendanceFlags } from "@/lib/attendance";
 import { requireAdminProfile } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
@@ -24,7 +25,7 @@ export default async function AdminDashboardPage() {
     reportsToday
   ] = await Promise.all([
     supabase.from("profiles").select("id, role, status"),
-    supabase.from("attendance").select("employee_id, status").eq("work_date", today),
+    supabase.from("attendance").select("employee_id, check_in_at, check_out_at, total_hours, status").eq("work_date", today),
     supabase.from("tasks").select("id", { count: "exact", head: true }).eq("status", "Pending"),
     supabase
       .from("tasks")
@@ -40,9 +41,11 @@ export default async function AdminDashboardPage() {
   const activeEmployeeIds = new Set(activeEmployees.map((employee) => employee.id));
   const activeAttendanceToday = (attendanceToday.data ?? []).filter((item) => activeEmployeeIds.has(item.employee_id));
   const activeAttendanceEmployeeIds = new Set(activeAttendanceToday.map((item) => item.employee_id));
+  const activeAttendanceFlags = activeAttendanceToday.map((item) => deriveAttendanceFlags(item, settings));
   const activeEmployeeCount = activeEmployees.length;
-  const presentToday = activeAttendanceToday.filter((item) => item.status === "Present" || item.status === "Half Day").length;
-  const lateToday = activeAttendanceToday.filter((item) => item.status === "Late").length;
+  const presentToday = activeAttendanceFlags.filter((flags) => flags.isPresent).length;
+  const lateToday = activeAttendanceFlags.filter((flags) => flags.isLate).length;
+  const halfDayToday = activeAttendanceFlags.filter((flags) => flags.isHalfDay).length;
   const reportEmployees = new Set((reportsToday.data ?? []).filter((item) => activeEmployeeIds.has(item.employee_id)).map((item) => item.employee_id));
   const missingReports = Math.max(activeEmployeeCount - reportEmployees.size, 0);
   const absentToday = activeEmployees.filter((employee) => !activeAttendanceEmployeeIds.has(employee.id)).length;
@@ -71,6 +74,7 @@ export default async function AdminDashboardPage() {
         <StatCard label={t("presentToday", locale)} value={presentToday} href="/admin/attendance" />
         <StatCard label={t("absentToday", locale)} value={absentToday} href="/admin/attendance" />
         <StatCard label={t("lateToday", locale)} value={lateToday} href="/admin/attendance" />
+        <StatCard label="Half-day today" value={halfDayToday} href="/admin/attendance?status=Half+Day" />
         <StatCard label="Reports submitted today" value={reportEmployees.size} hint={formatDate(today)} href="/admin/daily-reports" />
         <StatCard label="Reports missing today" value={missingReports} href="/admin/daily-reports" />
         <StatCard label={t("pendingTasks", locale)} value={pendingTasks.count ?? 0} href="/admin/tasks" />
@@ -85,6 +89,7 @@ export default async function AdminDashboardPage() {
         <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
           <ActionCount label="Absent employees" value={absentToday} href="/admin/attendance" />
           <ActionCount label="Late employees" value={lateToday} href="/admin/attendance" />
+          <ActionCount label="Half-day employees" value={halfDayToday} href="/admin/attendance?status=Half+Day" />
           <ActionCount label="Missing daily reports" value={missingReports} href="/admin/daily-reports" />
           <ActionCount label="Pending leave requests" value={pendingLeaves.count ?? 0} href="/admin/leaves" />
           <ActionCount label="Overdue tasks" value={overdueTasks.count ?? 0} href="/admin/tasks" />

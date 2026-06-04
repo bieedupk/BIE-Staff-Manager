@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { LayoutDashboard } from "lucide-react";
+import { DepartmentBadges } from "@/components/common/department-badges";
 import { LanguageToggle } from "@/components/layout/language-toggle";
 import { SignOutButton } from "@/components/layout/sign-out-button";
 import type { Locale } from "@/lib/i18n";
@@ -18,10 +19,13 @@ type Props = {
   locale: Locale;
   signOutLabel: string;
   departmentText?: string;
+  departments?: string[];
   headerWidget?: React.ReactNode;
 };
 
-export function AppShell({ children, profile, nav, locale, signOutLabel, departmentText = "Not assigned", headerWidget }: Props) {
+export function AppShell({ children, profile, nav, locale, signOutLabel, departmentText = "Not assigned", departments, headerWidget }: Props) {
+  const departmentNames = departments ?? (departmentText === "Not assigned" ? [] : departmentText.split(","));
+
   return (
     <div className="min-h-screen bg-slate-50">
       <aside className="fixed inset-y-0 hidden w-72 border-e border-emerald-100 bg-white p-5 lg:block">
@@ -29,7 +33,9 @@ export function AppShell({ children, profile, nav, locale, signOutLabel, departm
         <div className="mt-6 rounded-lg bg-emerald-50 p-3">
           <p className="font-bold text-slate-950">{profile.full_name}</p>
           <p className="text-sm font-medium text-slate-600">{roleLabel(profile.role)}</p>
-          <p className="text-xs text-slate-500">{departmentText}</p>
+          <div className="mt-2">
+            <DepartmentBadges departments={departmentNames} compact />
+          </div>
         </div>
         <nav className="mt-6 grid gap-1">
           {nav.map((item) => (

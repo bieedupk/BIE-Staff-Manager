@@ -2,8 +2,10 @@ import Link from "next/link";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { deriveAttendanceFlags } from "@/lib/attendance";
 import { requireAdminProfile } from "@/lib/auth";
 import { departmentTextForProfile, fetchEmployeeDepartmentsByEmployee } from "@/lib/employee-departments";
+import { getOrganizationSettings } from "@/lib/organization-settings";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import type { AttendanceRecord, Profile } from "@/lib/types";
@@ -26,6 +28,7 @@ export default async function AdminAttendancePage({ searchParams }: Props) {
   const statusFilter = resolvedSearchParams?.status || "All";
   const employeeFilter = resolvedSearchParams?.employee || "";
   const selectedDate = resolvedSearchParams?.date || today;
+  const settings = await getOrganizationSettings();
 
   let attendanceQuery = supabase
     .from("attendance")
@@ -54,6 +57,7 @@ export default async function AdminAttendancePage({ searchParams }: Props) {
 
   const employees = (profiles ?? []) as Profile[];
   const selectedAttendance = (attendanceRows ?? []) as AttendanceRecord[];
+  const attendanceFlagsByRecordId = new Map(selectedAttendance.map((record) => [record.id, deriveAttendanceFlags(record, settings)]));
   const assignmentsByEmployee = await fetchEmployeeDepartmentsByEmployee(supabase, [
     ...employees.map((employee) => employee.id),
     ...selectedAttendance.map((record) => record.employee_id)
@@ -66,7 +70,7 @@ export default async function AdminAttendancePage({ searchParams }: Props) {
       ? []
       : statusFilter === "All"
         ? selectedAttendance
-        : selectedAttendance.filter((record) => record.status === statusFilter);
+        : selectedAttendance.filter((record) => attendanceMatchesFilter(attendanceFlagsByRecordId.get(record.id), statusFilter));
 
   return (
     <>
@@ -141,7 +145,11 @@ export default async function AdminAttendancePage({ searchParams }: Props) {
                         {record.profiles ? departmentTextForProfile(record.profiles, assignmentsByEmployee) : "Not assigned"} | {record.profiles?.designation || "-"}
                       </p>
                     </div>
-                    <StatusBadge tone="attendance">{record.status}</StatusBadge>
+                    <div className="flex flex-wrap justify-end gap-2">
+                      {(attendanceFlagsByRecordId.get(record.id)?.displayStatuses ?? [record.status]).map((status) => (
+                        <StatusBadge key={status} tone="attendance">{status}</StatusBadge>
+                      ))}
+                    </div>
                   </div>
                   <dl className="mt-3 grid gap-2 text-sm text-slate-600 sm:grid-cols-2 xl:grid-cols-4">
                     <div>Date: {formatDate(record.work_date)}</div>
@@ -158,6 +166,14 @@ export default async function AdminAttendancePage({ searchParams }: Props) {
       </section>
     </>
   );
+}
+
+function attendanceMatchesFilter(flags: ReturnType<typeof deriveAttendanceFlags> | undefined, status: string) {
+  if (!flags) return false;
+  if (status === "Present") return flags.isPresent;
+  if (status === "Late") return flags.isLate;
+  if (status === "Half Day") return flags.isHalfDay;
+  return false;
 }
 
 function attendanceStatusPath(status: string, employee: string, date: string) {
