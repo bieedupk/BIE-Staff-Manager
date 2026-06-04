@@ -32,10 +32,17 @@ function loginErrorMessage(code: string | null) {
   return "";
 }
 
+function loginSuccessMessage(code: string | null) {
+  if (code === "password-updated") return "Password updated successfully. Please log in with your new password.";
+  return "";
+}
+
 export function LoginForm({ supabaseConfigured = true }: { supabaseConfigured?: boolean }) {
   const searchParams = useSearchParams();
   const initialError = loginErrorMessage(searchParams.get("error"));
+  const initialMessage = loginSuccessMessage(searchParams.get("message"));
   const [error, setError] = useState(initialError);
+  const [message, setMessage] = useState(initialMessage);
   const [loading, setLoading] = useState(false);
 
   async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -47,6 +54,7 @@ export function LoginForm({ supabaseConfigured = true }: { supabaseConfigured?: 
 
     setLoading(true);
     setError("");
+    setMessage("");
 
     const formData = new FormData(event.currentTarget);
     const next = searchParams.get("next");
@@ -114,6 +122,7 @@ export function LoginForm({ supabaseConfigured = true }: { supabaseConfigured?: 
         />
       </label>
       {error ? <p className="rounded-lg bg-red-50 p-3 text-sm font-semibold text-red-700">{error}</p> : null}
+      {message ? <p className="rounded-lg bg-emerald-50 p-3 text-sm font-semibold text-emerald-700">{message}</p> : null}
       <button
         type="submit"
         disabled={loading || !supabaseConfigured}
