@@ -6,6 +6,7 @@ import { logAudit } from "@/app/actions/audit";
 import { requireAdminProfile } from "@/lib/auth";
 import { departmentDisplayName } from "@/lib/department-utils";
 import { ensureDefaultDepartments } from "@/lib/default-departments";
+import { sendEmployeeWelcomeEmail } from "@/lib/email/employee-welcome";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import type { Department, EmployeeStatus, Profile, UserRole } from "@/lib/types";
@@ -107,6 +108,7 @@ export async function createEmployee(formData: FormData) {
   let authUserId: string | null = null;
   let success = false;
   let errorMessage = "Employee could not be created.";
+  let successMessage = "Employee created successfully.";
 
   try {
     requireAdminManager(currentProfile.role);
@@ -174,6 +176,19 @@ export async function createEmployee(formData: FormData) {
       throw new Error(`Employee was created but audit log failed: ${auditError.message}`);
     }
 
+    const emailResult = await sendEmployeeWelcomeEmail({
+      employeeId: authData.user.id,
+      employeeName: fullName,
+      email,
+      designation: String(formData.get("designation") || "").trim() || null,
+      departments,
+      otherDepartmentText
+    });
+    successMessage =
+      emailResult.status === "sent"
+        ? "Employee created and welcome email sent."
+        : `Employee created, but welcome email failed/skipped. ${emailResult.message}`;
+
     revalidatePath("/admin/employees");
     revalidatePath("/admin/dashboard");
     success = true;
@@ -185,7 +200,7 @@ export async function createEmployee(formData: FormData) {
     errorMessage = error instanceof Error ? error.message : errorMessage;
   }
 
-  redirectEmployeeStatus(success ? "success" : "error", success ? "Employee created successfully." : errorMessage);
+  redirectEmployeeStatus(success ? "success" : "error", success ? successMessage : errorMessage);
 }
 
 export async function updateEmployee(formData: FormData) {

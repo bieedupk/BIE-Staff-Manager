@@ -1,7 +1,8 @@
-import { updateOfficeTimingSettings } from "@/app/actions/settings";
+import { updateOfficeTimingSettings, updateWelcomeEmailTemplate } from "@/app/actions/settings";
 import { PageHeader } from "@/components/ui/page-header";
 import { requireAdminProfile } from "@/lib/auth";
 import { fetchEmployeeDepartmentText } from "@/lib/employee-departments";
+import { getWelcomeEmailTemplate } from "@/lib/email/templates";
 import { getOrganizationSettings } from "@/lib/organization-settings";
 import { createClient } from "@/lib/supabase/server";
 import { isAdminManagerRole } from "@/lib/utils";
@@ -12,12 +13,15 @@ export default async function AdminSettingsPage({
   searchParams?: Promise<{
     office_settings_success?: string;
     office_settings_error?: string;
+    email_template_success?: string;
+    email_template_error?: string;
   }>;
 }) {
   const profile = await requireAdminProfile();
   const supabase = await createClient();
   const departmentText = await fetchEmployeeDepartmentText(supabase, profile);
   const settings = await getOrganizationSettings();
+  const welcomeTemplate = await getWelcomeEmailTemplate();
   const resolvedSearchParams = await searchParams;
   const canUpdateOfficeTiming = isAdminManagerRole(profile.role);
 
@@ -25,6 +29,7 @@ export default async function AdminSettingsPage({
     <>
       <PageHeader title="Settings" subtitle="Phase 1 keeps settings simple and focused." backHref="/admin/dashboard" />
       <SettingsMessage success={resolvedSearchParams?.office_settings_success} error={resolvedSearchParams?.office_settings_error} />
+      <SettingsMessage success={resolvedSearchParams?.email_template_success} error={resolvedSearchParams?.email_template_error} />
       <section className="rounded-lg border border-emerald-100 bg-white p-4 shadow-soft">
         <h2 className="font-extrabold text-slate-950">Account</h2>
         <dl className="mt-4 grid gap-3 text-sm md:grid-cols-2">
@@ -78,7 +83,69 @@ export default async function AdminSettingsPage({
           </dl>
         )}
       </section>
+      <section className="mt-5 rounded-lg border border-emerald-100 bg-white p-4 shadow-soft">
+        <h2 className="font-extrabold text-slate-950">Email Templates</h2>
+        <p className="mt-1 text-sm font-medium text-slate-500">
+          Welcome email content sent after an admin creates a staff account.
+        </p>
+        {canUpdateOfficeTiming ? (
+          <form action={updateWelcomeEmailTemplate} className="mt-4 grid gap-3">
+            <label className="grid gap-1 text-sm font-bold text-slate-700">
+              Welcome email subject
+              <input
+                name="subject"
+                defaultValue={welcomeTemplate.subject}
+                required
+                className="min-h-11 rounded-lg border border-slate-300 px-3"
+              />
+            </label>
+            <label className="grid gap-1 text-sm font-bold text-slate-700">
+              Welcome email body text
+              <textarea
+                name="body_text"
+                defaultValue={welcomeTemplate.body_text}
+                required
+                rows={12}
+                className="rounded-lg border border-slate-300 px-3 py-2"
+              />
+            </label>
+            <div className="grid gap-3 md:grid-cols-2">
+              <Input name="contact_email" label="Contact email" defaultValue={welcomeTemplate.contact_email ?? ""} />
+              <Input name="contact_phone" label="Contact phone" defaultValue={welcomeTemplate.contact_phone ?? ""} />
+            </div>
+            <label className="grid gap-1 text-sm font-bold text-slate-700">
+              Contact address
+              <textarea
+                name="contact_address"
+                defaultValue={welcomeTemplate.contact_address ?? ""}
+                rows={3}
+                className="rounded-lg border border-slate-300 px-3 py-2"
+              />
+            </label>
+            <div>
+              <button className="min-h-11 rounded-lg bg-bie-700 px-4 font-extrabold text-white">Save Email Template</button>
+            </div>
+          </form>
+        ) : (
+          <dl className="mt-4 grid gap-3 text-sm md:grid-cols-2">
+            <SettingValue label="Welcome email subject" value={welcomeTemplate.subject} />
+            <SettingValue label="Contact email" value={welcomeTemplate.contact_email || "-"} />
+            <SettingValue label="Contact phone" value={welcomeTemplate.contact_phone || "-"} />
+            <SettingValue label="Contact address" value={welcomeTemplate.contact_address || "-"} />
+          </dl>
+        )}
+      </section>
     </>
+  );
+}
+
+function Input(props: React.InputHTMLAttributes<HTMLInputElement> & { label: string; name: string }) {
+  const { label, ...inputProps } = props;
+  return (
+    <label className="grid gap-1 text-sm font-bold text-slate-700">
+      {label}
+      <input {...inputProps} className="min-h-11 rounded-lg border border-slate-300 px-3" />
+    </label>
   );
 }
 

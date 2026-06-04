@@ -17,13 +17,13 @@ export function ForgotPasswordForm() {
     const formData = new FormData(event.currentTarget);
     const supabase = createClient();
     const { error: resetError } = await supabase.auth.resetPasswordForEmail(String(formData.get("email")), {
-      redirectTo: `${window.location.origin}/login`
+      redirectTo: `${window.location.origin}/auth/callback?next=/reset-password`
     });
 
     if (resetError) {
-      setError(resetError.message);
+      setError("Recovery email could not be sent. Please contact admin.");
     } else {
-      setMessage("If this email exists, Supabase will send a password reset link.");
+      setMessage("If this email exists, a reset link has been sent.");
     }
     setLoading(false);
   }

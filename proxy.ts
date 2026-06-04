@@ -3,12 +3,18 @@ import { NextResponse, type NextRequest } from "next/server";
 import { hasPublicSupabaseEnv } from "@/lib/env";
 
 const protectedPrefixes = ["/admin", "/employee"];
+const publicRecoveryPrefixes = ["/forgot-password", "/reset-password", "/auth/callback", "/login"];
 
 export async function proxy(request: NextRequest) {
   let response = NextResponse.next({
     request
   });
+  const isPublicRecoveryRoute = publicRecoveryPrefixes.some((prefix) => request.nextUrl.pathname.startsWith(prefix));
   const isProtected = protectedPrefixes.some((prefix) => request.nextUrl.pathname.startsWith(prefix));
+
+  if (isPublicRecoveryRoute) {
+    return response;
+  }
 
   if (!isProtected) {
     return response;

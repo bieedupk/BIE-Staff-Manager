@@ -10,13 +10,18 @@ import { ensureDefaultDepartments } from "@/lib/default-departments";
 import { departmentNamesForProfile, fetchEmployeeDepartmentsByEmployee } from "@/lib/employee-departments";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
-import type { AuthorizedDevice, Department, Profile } from "@/lib/types";
+import type { AuthorizedDevice, Department, EmailLogStatus, Profile } from "@/lib/types";
 import { formatDate, formatDateTime, isAdminManagerRole, roleLabel } from "@/lib/utils";
 
 const roles = ["employee", "supervisor", "admin", "super_admin"];
 const statuses = ["active", "disabled"];
 const employeeFilters = ["all", "active", "disabled"] as const;
 type EmployeeFilter = (typeof employeeFilters)[number];
+type WelcomeEmailLog = {
+  employee_id: string | null;
+  status: EmailLogStatus;
+  created_at: string;
+};
 
 function employeeSortValue(profile: Profile) {
   return `${profile.status === "active" ? "0" : "1"}-${profile.full_name.toLocaleLowerCase("en")}`;
@@ -51,11 +56,18 @@ export default async function AdminEmployeesPage({
     ? (resolvedSearchParams?.status_filter as EmployeeFilter)
     : "all";
   const supabase = canManageEmployees ? createAdminClient() : await createClient();
-  const [{ data: profiles }, { data: departments }, { data: authorizedDevices }] = await Promise.all([
+  const [{ data: profiles }, { data: departments }, { data: authorizedDevices }, { data: welcomeEmailLogs }] = await Promise.all([
     supabase.from("profiles").select("*"),
     supabase.from("departments").select("*").eq("is_active", true).order("sort_order", { ascending: true, nullsFirst: false }).order("name"),
     canManageEmployees
       ? supabase.from("authorized_devices").select("*").order("registered_at", { ascending: false })
+      : Promise.resolve({ data: [] }),
+    canManageEmployees
+      ? supabase
+          .from("email_logs")
+          .select("employee_id,status,created_at")
+          .eq("template_key", "employee_welcome")
+          .order("created_at", { ascending: false })
       : Promise.resolve({ data: [] })
   ]);
 
@@ -73,6 +85,7 @@ export default async function AdminEmployeesPage({
   );
   const supervisors = allEmployees.filter((profile) => ["super_admin", "admin", "supervisor"].includes(profile.role));
   const devices = (authorizedDevices ?? []) as AuthorizedDevice[];
+  const latestWelcomeEmailByEmployee = latestWelcomeEmailLogs((welcomeEmailLogs ?? []) as WelcomeEmailLog[]);
   const devicesByEmployee = new Map<string, AuthorizedDevice[]>();
   const defaultDepartmentId = activeDepartments.find((department) => departmentDisplayName(department.name) === "Administration")?.id;
 
@@ -165,6 +178,7 @@ export default async function AdminEmployeesPage({
                   <div className="mt-2 flex flex-wrap gap-2">
                     <StatusBadge>{roleLabel(employee.role)}</StatusBadge>
                     <StatusBadge tone="employee">{roleLabel(employee.status)}</StatusBadge>
+                    {canManageEmployees ? <WelcomeEmailStatus log={latestWelcomeEmailByEmployee.get(employee.id)} /> : null}
                     {departmentNamesForProfile(employee, assignmentsByEmployee).map((departmentName) => (
                       <StatusBadge key={departmentName}>{departmentName}</StatusBadge>
                     ))}
@@ -259,6 +273,41 @@ function selectedOtherDepartment(employee: Profile, assignmentsByEmployee: Map<s
 function assignmentDepartmentName(assignment: import("@/lib/types").EmployeeDepartment) {
   const department = Array.isArray(assignment.departments) ? assignment.departments[0] : assignment.departments;
   return department?.name;
+}
+
+function latestWelcomeEmailLogs(logs: WelcomeEmailLog[]) {
+  const latestLogs = new Map<string, WelcomeEmailLog>();
+
+  logs.forEach((log) => {
+    if (log.employee_id && !latestLogs.has(log.employee_id)) {
+      latestLogs.set(log.employee_id, log);
+    }
+  });
+
+  return latestLogs;
+}
+
+function WelcomeEmailStatus({ log }: { log?: WelcomeEmailLog }) {
+  const label = log ? welcomeEmailStatusLabel(log.status) : "Not sent";
+  const className = log ? welcomeEmailStatusClass(log.status) : "bg-slate-50 text-slate-700 ring-slate-200";
+
+  return (
+    <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-bold ring-1 ${className}`}>
+      Welcome email: {label}
+    </span>
+  );
+}
+
+function welcomeEmailStatusLabel(status: EmailLogStatus) {
+  if (status === "sent") return "Sent";
+  if (status === "failed") return "Failed";
+  return "Skipped";
+}
+
+function welcomeEmailStatusClass(status: EmailLogStatus) {
+  if (status === "sent") return "bg-emerald-50 text-emerald-700 ring-emerald-200";
+  if (status === "failed") return "bg-red-50 text-red-700 ring-red-200";
+  return "bg-amber-50 text-amber-700 ring-amber-200";
 }
 
 function AuthorizedDevicePanel({ devices, employeeId }: { devices: AuthorizedDevice[]; employeeId: string }) {

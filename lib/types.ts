@@ -138,3 +138,19 @@ export type AuditLog = {
   created_at: string;
   profiles?: Pick<Profile, "full_name"> | null;
 };
+
+export type EmailTemplate = {
+  id: string;
+  template_key: string;
+  subject: string;
+  body_text: string;
+  body_html: string | null;
+  contact_email: string | null;
+  contact_phone: string | null;
+  contact_address: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type EmailLogStatus = "sent" | "failed" | "skipped";

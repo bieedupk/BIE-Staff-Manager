@@ -28,6 +28,7 @@ function loginErrorMessage(code: string | null) {
   if (code === "inactive") return "Your account is inactive or missing a staff profile.";
   if (code === "employee_mobile") return "Employee access is allowed only from an authorized office computer.";
   if (code === "unauthorized_device") return "This device is not authorized. Please contact administration.";
+  if (code === "recovery") return "Password reset link is invalid or expired. Please request a new link.";
   return "";
 }
 
