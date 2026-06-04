@@ -1,7 +1,7 @@
 import { updateOfficeTimingSettings } from "@/app/actions/settings";
 import { PageHeader } from "@/components/ui/page-header";
 import { requireAdminProfile } from "@/lib/auth";
-import { departmentTextForProfile, fetchEmployeeDepartmentsByEmployee } from "@/lib/employee-departments";
+import { fetchEmployeeDepartmentText } from "@/lib/employee-departments";
 import { getOrganizationSettings } from "@/lib/organization-settings";
 import { createClient } from "@/lib/supabase/server";
 import { isAdminManagerRole } from "@/lib/utils";
@@ -16,7 +16,7 @@ export default async function AdminSettingsPage({
 }) {
   const profile = await requireAdminProfile();
   const supabase = await createClient();
-  const assignmentsByEmployee = await fetchEmployeeDepartmentsByEmployee(supabase, [profile.id]);
+  const departmentText = await fetchEmployeeDepartmentText(supabase, profile);
   const settings = await getOrganizationSettings();
   const resolvedSearchParams = await searchParams;
   const canUpdateOfficeTiming = isAdminManagerRole(profile.role);
@@ -38,7 +38,7 @@ export default async function AdminSettingsPage({
           </div>
           <div>
             <dt className="font-bold text-slate-500">Department</dt>
-            <dd className="font-semibold text-slate-950">{departmentTextForProfile(profile, assignmentsByEmployee, "-")}</dd>
+            <dd className="font-semibold text-slate-950">{departmentText}</dd>
           </div>
           <div>
             <dt className="font-bold text-slate-500">Status</dt>

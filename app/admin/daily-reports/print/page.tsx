@@ -76,7 +76,7 @@ export default async function DailyReportsPrintPage({ searchParams }: Props) {
                 <div>
                   <h2>{report.profiles?.full_name || "Employee"}</h2>
                   <p>
-                    {report.profiles ? departmentTextForProfile(report.profiles, assignmentsByEmployee, "-") : "-"} | {report.profiles?.designation || "-"}
+                    {report.profiles ? departmentTextForProfile(report.profiles, assignmentsByEmployee) : "Not assigned"} | {report.profiles?.designation || "-"}
                   </p>
                 </div>
                 <div className="report-hours">

@@ -52,5 +52,6 @@
   "completedTasks": "Completed Tasks",
   "overdueTasks": "Overdue Tasks",
   "pendingLeaves": "Pending Leave Requests",
-  "syllabus": "Syllabus"
+  "syllabus": "Syllabus",
+  "notAssigned": "Not assigned"
 }

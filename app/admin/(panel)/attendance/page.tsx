@@ -124,7 +124,7 @@ export default async function AdminAttendancePage({ searchParams }: Props) {
                   <AttendanceEmployeeCard
                     key={employee.id}
                     name={employee.full_name}
-                    department={departmentTextForProfile(employee, assignmentsByEmployee, "-")}
+                    department={departmentTextForProfile(employee, assignmentsByEmployee)}
                     status="Absent"
                   />
                 ))
@@ -138,7 +138,7 @@ export default async function AdminAttendancePage({ searchParams }: Props) {
                     <div>
                       <p className="font-extrabold text-slate-950">{record.profiles?.full_name || "Employee"}</p>
                       <p className="text-sm font-medium text-slate-500">
-                        {record.profiles ? departmentTextForProfile(record.profiles, assignmentsByEmployee, "-") : "-"} | {record.profiles?.designation || "-"}
+                        {record.profiles ? departmentTextForProfile(record.profiles, assignmentsByEmployee) : "Not assigned"} | {record.profiles?.designation || "-"}
                       </p>
                     </div>
                     <StatusBadge tone="attendance">{record.status}</StatusBadge>

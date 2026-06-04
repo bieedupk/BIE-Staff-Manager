@@ -47,7 +47,7 @@ export type EmployeeDepartment = {
   other_department: string | null;
   is_primary: boolean;
   created_at: string;
-  departments?: Department | null;
+  departments?: Department | Department[] | null;
 };
 
 export type AuthorizedDevice = {

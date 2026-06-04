@@ -248,12 +248,17 @@ function selectedDepartmentIds(
 
 function selectedOtherDepartment(employee: Profile, assignmentsByEmployee: Map<string, import("@/lib/types").EmployeeDepartment[]>) {
   const otherAssignment = (assignmentsByEmployee.get(employee.id) ?? []).find(
-    (assignment) => departmentDisplayName(assignment.departments?.name) === "Other"
+    (assignment) => departmentDisplayName(assignmentDepartmentName(assignment)) === "Other"
   );
 
   if (otherAssignment?.other_department) return otherAssignment.other_department;
   if (employee.department && employee.department !== "Other") return employee.department;
   return "";
+}
+
+function assignmentDepartmentName(assignment: import("@/lib/types").EmployeeDepartment) {
+  const department = Array.isArray(assignment.departments) ? assignment.departments[0] : assignment.departments;
+  return department?.name;
 }
 
 function AuthorizedDevicePanel({ devices, employeeId }: { devices: AuthorizedDevice[]; employeeId: string }) {
