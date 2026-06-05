@@ -3,13 +3,15 @@
 import { useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 
-const expiredResetLinkMessage = "This reset link is expired or already used. Please request a new password reset link.";
+const invalidResetLinkMessage =
+  "Your reset link is expired or invalid. Please request a new password reset link.";
 
 export function ResetPasswordForm() {
   const initializedRef = useRef(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [sessionLoading, setSessionLoading] = useState(true);
   const [sessionReady, setSessionReady] = useState(false);
 
   useEffect(() => {
@@ -21,24 +23,42 @@ export function ResetPasswordForm() {
       const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
       const accessToken = hashParams.get("access_token");
       const refreshToken = hashParams.get("refresh_token");
+      const recoveryType = hashParams.get("type");
 
-      if (!accessToken || !refreshToken) {
+      try {
+        if (accessToken && refreshToken && recoveryType === "recovery") {
+          const { error: sessionError } = await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken
+          });
+
+          if (sessionError) {
+            setError(readableResetError(sessionError.message));
+            setSessionReady(false);
+            return;
+          }
+
+          window.history.replaceState(null, document.title, `${window.location.pathname}${window.location.search}`);
+        }
+
+        const {
+          data: { session },
+          error: sessionError
+        } = await supabase.auth.getSession();
+
+        if (sessionError || !session) {
+          setError(readableResetError(sessionError?.message));
+          setSessionReady(false);
+          return;
+        }
+
         setSessionReady(true);
-        return;
+      } catch {
+        setError(invalidResetLinkMessage);
+        setSessionReady(false);
+      } finally {
+        setSessionLoading(false);
       }
-
-      const { error: sessionError } = await supabase.auth.setSession({
-        access_token: accessToken,
-        refresh_token: refreshToken
-      });
-
-      if (sessionError) {
-        setError(readableResetError(sessionError.message));
-        return;
-      }
-
-      window.history.replaceState(null, document.title, `${window.location.pathname}${window.location.search}`);
-      setSessionReady(true);
     }
 
     void establishRecoverySession();
@@ -46,7 +66,10 @@ export function ResetPasswordForm() {
 
   async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!sessionReady) return;
+    if (!sessionReady) {
+      setError(invalidResetLinkMessage);
+      return;
+    }
 
     setLoading(true);
     setError("");
@@ -69,6 +92,17 @@ export function ResetPasswordForm() {
     }
 
     const supabase = createClient();
+    const {
+      data: { session },
+      error: sessionError
+    } = await supabase.auth.getSession();
+
+    if (sessionError || !session) {
+      setError(readableResetError(sessionError?.message));
+      setLoading(false);
+      return;
+    }
+
     const { error: updateError } = await supabase.auth.updateUser({ password });
 
     if (updateError) {
@@ -94,7 +128,7 @@ export function ResetPasswordForm() {
           autoComplete="new-password"
           required
           minLength={8}
-          disabled={loading || !sessionReady}
+          disabled={loading || sessionLoading || !sessionReady}
           className="min-h-11 rounded-lg border border-slate-300 px-3 outline-none focus:border-bie-600 focus:ring-4 focus:ring-emerald-100"
         />
       </label>
@@ -106,7 +140,7 @@ export function ResetPasswordForm() {
           autoComplete="new-password"
           required
           minLength={8}
-          disabled={loading || !sessionReady}
+          disabled={loading || sessionLoading || !sessionReady}
           className="min-h-11 rounded-lg border border-slate-300 px-3 outline-none focus:border-bie-600 focus:ring-4 focus:ring-emerald-100"
         />
       </label>
@@ -114,10 +148,16 @@ export function ResetPasswordForm() {
       {message ? <p className="rounded-lg bg-emerald-50 p-3 text-sm font-semibold text-emerald-700">{message}</p> : null}
       <button
         type="submit"
-        disabled={loading || !sessionReady}
+        disabled={loading || sessionLoading || !sessionReady}
         className="min-h-11 rounded-lg bg-bie-700 px-4 font-extrabold text-white hover:bg-bie-900 disabled:opacity-60"
       >
-        {loading ? "Updating..." : sessionReady ? "Update Password" : "Preparing reset link..."}
+        {loading
+          ? "Updating..."
+          : sessionLoading
+            ? "Preparing reset link..."
+            : sessionReady
+              ? "Update Password"
+              : "Reset link unavailable"}
       </button>
     </form>
   );
@@ -127,11 +167,14 @@ function readableResetError(message?: string) {
   const normalizedMessage = (message || "").toLowerCase();
 
   if (
+    !message ||
     normalizedMessage.includes("invalid refresh token") ||
     normalizedMessage.includes("refresh token not found") ||
+    normalizedMessage.includes("auth session missing") ||
+    normalizedMessage.includes("session missing") ||
     normalizedMessage.includes("expired")
   ) {
-    return expiredResetLinkMessage;
+    return invalidResetLinkMessage;
   }
 
   return message || "Password could not be updated. Please request a new reset link.";
