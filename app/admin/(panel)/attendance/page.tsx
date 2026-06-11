@@ -2,7 +2,7 @@ import Link from "next/link";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { deriveAttendanceFlags, formatDurationFromHours } from "@/lib/attendance";
+import { deriveAttendanceFlags, formatDurationFromHours, getRecentAttendanceForAll } from "@/lib/attendance";
 import { requireAdminProfile } from "@/lib/auth";
 import { departmentTextForProfile, fetchEmployeeDepartmentsByEmployee } from "@/lib/employee-departments";
 import { getOrganizationSettings } from "@/lib/organization-settings";
@@ -37,43 +37,73 @@ export default async function AdminAttendancePage({ searchParams }: Props) {
   const today = todayISO();
   const statusFilter = normalizeAttendanceFilter(resolvedSearchParams?.status);
   const employeeFilter = resolvedSearchParams?.employee || "";
-  const selectedDate = resolvedSearchParams?.date || today;
+  const dateParamProvided = Boolean(resolvedSearchParams?.date);
+  const selectedDate = resolvedSearchParams?.date || "";
   const settings = await getOrganizationSettings();
 
-  let attendanceQuery = supabase
-    .from("attendance")
-    .select("*, profiles(id, full_name, department, department_id, designation)")
-    .eq("work_date", selectedDate)
-    .order("check_in_at", { ascending: false });
-
-  if (employeeFilter) attendanceQuery = attendanceQuery.eq("employee_id", employeeFilter);
-
-  const [{ data: profiles }, { data: attendanceRows, error: attendanceError }] = await Promise.all([
-    supabase.from("profiles").select("*").eq("role", "employee").eq("status", "active").order("full_name"),
-    attendanceQuery
-  ]);
-
-  if (process.env.NODE_ENV !== "production") {
-    console.info("[attendance:admin]", {
-      selectedDate,
-      statusFilter,
-      adminProfileId: currentProfile.id,
-      adminRole: currentProfile.role,
-      attendanceFetchedCount: attendanceRows?.length ?? 0,
-      errorCode: attendanceError?.code ?? null,
-      errorMessage: attendanceError?.message ?? null
-    });
-  }
+  // Fetch all active employees
+  const { data: profiles } = await supabase
+    .from("profiles")
+    .select("*")
+    .eq("role", "employee")
+    .eq("status", "active")
+    .order("full_name");
 
   const employees = (profiles ?? []) as Profile[];
-  const selectedAttendance = (attendanceRows ?? []) as AttendanceRecord[];
+
+  // Decide whether to show recent history or a specific date
+  let attendanceRows: AttendanceRecord[] = [];
+
+  if (dateParamProvided) {
+    // User selected a specific date - fetch only that date
+    let attendanceQuery = supabase
+      .from("attendance")
+      .select("*, profiles(id, full_name, department, department_id, designation)")
+      .eq("work_date", selectedDate)
+      .order("check_in_at", { ascending: false });
+
+    if (employeeFilter) attendanceQuery = attendanceQuery.eq("employee_id", employeeFilter);
+
+    const { data, error: attendanceError } = await attendanceQuery;
+
+    if (process.env.NODE_ENV !== "production") {
+      console.info("[attendance:admin]", {
+        selectedDate,
+        statusFilter,
+        mode: "specific-date",
+        adminProfileId: currentProfile.id,
+        adminRole: currentProfile.role,
+        attendanceFetchedCount: data?.length ?? 0,
+        errorCode: attendanceError?.code ?? null
+      });
+    }
+
+    attendanceRows = (data ?? []) as AttendanceRecord[];
+  } else {
+    // Default: show recent history
+    const recentData = await getRecentAttendanceForAll(today, "admin-attendance", employeeFilter || undefined);
+
+    if (process.env.NODE_ENV !== "production") {
+      console.info("[attendance:admin]", {
+        mode: "recent-history",
+        adminProfileId: currentProfile.id,
+        adminRole: currentProfile.role,
+        attendanceFetchedCount: recentData.length,
+        employeeFilter: employeeFilter || "all"
+      });
+    }
+
+    attendanceRows = recentData;
+  }
+
+  const selectedAttendance = attendanceRows as AttendanceRecord[];
   const attendanceFlagsByRecordId = new Map(selectedAttendance.map((record) => [record.id, deriveAttendanceFlags(record, settings)]));
   const assignmentsByEmployee = await fetchEmployeeDepartmentsByEmployee(supabase, [
     ...employees.map((employee) => employee.id),
     ...selectedAttendance.map((record) => record.employee_id)
   ]);
   const presentIds = new Set(selectedAttendance.map((record) => record.employee_id));
-  const absentEmployees = employees.filter((employee) => !presentIds.has(employee.id));
+  const absentEmployees = dateParamProvided ? employees.filter((employee) => !presentIds.has(employee.id)) : [];
 
   const filteredAttendance =
     statusFilter === "all"
@@ -81,18 +111,32 @@ export default async function AdminAttendancePage({ searchParams }: Props) {
       : statusFilter === "absent"
         ? []
         : selectedAttendance.filter((record) => attendanceMatchesFilter(attendanceFlagsByRecordId.get(record.id), statusFilter));
-  const showAbsentEmployees = statusFilter === "all" || statusFilter === "absent";
+  const showAbsentEmployees = (statusFilter === "all" || statusFilter === "absent") && dateParamProvided;
 
   return (
     <>
       <PageHeader title="Attendance" subtitle="View today's attendance and employee-wise attendance history." backHref="/admin/dashboard" />
 
       <section className="mb-5 rounded-lg border border-emerald-100 bg-white p-4 shadow-soft">
+        <div className="mb-4 flex flex-col gap-2 sm:items-center sm:justify-between">
+          <h2 className="font-extrabold text-slate-950">
+            {dateParamProvided ? `Attendance - ${formatDate(selectedDate)}` : "Recent Attendance History"}
+          </h2>
+          {dateParamProvided && (
+            <a
+              href="/admin/attendance"
+              className="inline-block rounded-lg bg-slate-100 px-3 py-2 text-sm font-bold text-slate-700 hover:bg-slate-200"
+            >
+              Clear Filter
+            </a>
+          )}
+        </div>
+
         <div className="flex flex-wrap gap-2">
           {attendanceFilters.map((filter) => (
             <Link
               key={filter.value}
-              href={attendanceStatusPath(filter.value, employeeFilter, selectedDate)}
+              href={attendanceStatusPath(filter.value, employeeFilter, selectedDate, dateParamProvided)}
               className={`rounded-lg px-3 py-2 text-sm font-bold ${
                 statusFilter === filter.value ? "bg-bie-700 text-white" : "bg-emerald-50 text-bie-700"
               }`}
@@ -104,7 +148,7 @@ export default async function AdminAttendancePage({ searchParams }: Props) {
         <form className="mt-4 grid gap-2 sm:max-w-md">
           <input type="hidden" name="status" value={statusFilter} />
           <label className="grid gap-1 text-sm font-bold text-slate-700">
-            Attendance date
+            Filter by date (optional)
             <input
               name="date"
               type="date"
@@ -129,9 +173,9 @@ export default async function AdminAttendancePage({ searchParams }: Props) {
       </section>
 
       <section className="rounded-lg border border-emerald-100 bg-white p-4 shadow-soft">
-          <h2 className="font-extrabold text-slate-950">
-            {selectedDate === today ? "Today Attendance" : "Attendance"} - {formatDate(selectedDate)}
-          </h2>
+        <h2 className="font-extrabold text-slate-950">
+          {dateParamProvided ? "Records" : "Recent Attendance"}
+        </h2>
           <div className="mt-4 grid gap-3">
             {filteredAttendance.length || (showAbsentEmployees && absentEmployees.length) ? (
               <>
@@ -186,7 +230,13 @@ export default async function AdminAttendancePage({ searchParams }: Props) {
                 : null}
               </>
             ) : (
-              <EmptyState message={statusFilter === "absent" ? "No absent employees today." : "No attendance found for selected date."} />
+              <EmptyState 
+                message={
+                  statusFilter === "absent" 
+                    ? (dateParamProvided ? "No absent employees for selected date." : "No absent records available.")
+                    : (dateParamProvided ? "No attendance found for selected date." : "No attendance records available.")
+                } 
+              />
             )}
           </div>
       </section>
@@ -209,11 +259,11 @@ function attendanceMatchesFilter(flags: ReturnType<typeof deriveAttendanceFlags>
   return false;
 }
 
-function attendanceStatusPath(status: AttendanceFilter, employee: string, date: string) {
+function attendanceStatusPath(status: AttendanceFilter, employee: string, date: string, dateWasProvided: boolean) {
   const params = new URLSearchParams({ status });
 
   if (employee) params.set("employee", employee);
-  if (date) params.set("date", date);
+  if (dateWasProvided && date) params.set("date", date);
 
   return `/admin/attendance?${params.toString()}`;
 }

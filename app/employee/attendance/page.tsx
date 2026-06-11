@@ -2,7 +2,7 @@ import { checkIn, checkOut } from "@/app/actions/attendance";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { attendanceDisplayStatus, getTodayAttendanceForEmployee } from "@/lib/attendance";
+import { attendanceDisplayStatus, getTodayAttendanceForEmployee, getRecentAttendanceForEmployee } from "@/lib/attendance";
 import { requireEmployeeProfile } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import type { AttendanceRecord } from "@/lib/types";
@@ -27,19 +27,27 @@ export default async function EmployeeAttendancePage({
   const historyDateSelected = Boolean(historyDate);
   const selectedToday = historyDate === today;
   const supabase = await createClient();
-  const [attendance, { data: historyRows }] = await Promise.all([
+
+  const [attendance, records] = await Promise.all([
     getTodayAttendanceForEmployee(profile.id, today, "employee-attendance"),
-    historyDateSelected && !selectedToday
-      ? supabase
+    (async () => {
+      if (historyDateSelected && !selectedToday) {
+        const { data } = await supabase
           .from("attendance")
           .select("*")
           .eq("employee_id", profile.id)
           .eq("work_date", historyDate)
-          .order("check_in_at", { ascending: false })
-      : { data: [] as AttendanceRecord[] }
+          .order("check_in_at", { ascending: false });
+        return (data ?? []) as AttendanceRecord[];
+      } else if (!historyDateSelected) {
+        return await getRecentAttendanceForEmployee(profile.id, today, "employee-attendance");
+      }
+      return [] as AttendanceRecord[];
+    })()
   ]);
-  const records = (historyRows ?? []) as AttendanceRecord[];
+
   const attendanceStatus = attendanceDisplayStatus(attendance);
+  const isShowingRecent = !historyDateSelected;
 
   return (
     <>
@@ -85,10 +93,28 @@ export default async function EmployeeAttendancePage({
       </section>
 
       <section className="mt-5 rounded-lg border border-emerald-100 bg-white p-4 shadow-soft">
-        <h2 className="font-extrabold text-slate-950">View history by date</h2>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="font-extrabold text-slate-950">
+              {isShowingRecent ? "Recent Attendance History" : "Attendance"}
+              {historyDateSelected && !isShowingRecent && ` - ${formatDate(historyDate)}`}
+            </h2>
+            {isShowingRecent && (
+              <p className="text-sm font-medium text-slate-500">Last 10 days of records, latest first.</p>
+            )}
+          </div>
+          {!isShowingRecent && (
+            <a
+              href="/employee/attendance"
+              className="inline-block rounded-lg bg-slate-100 px-3 py-2 text-sm font-bold text-slate-700 hover:bg-slate-200"
+            >
+              Clear Filter
+            </a>
+          )}
+        </div>
         <form className="mt-4 grid gap-2 sm:max-w-sm">
           <label className="grid gap-1 text-sm font-bold text-slate-700">
-            Date
+            Filter by date (optional)
             <input
               name="history_date"
               type="date"
@@ -99,23 +125,21 @@ export default async function EmployeeAttendancePage({
           </label>
           <button className="min-h-11 rounded-lg bg-bie-700 px-4 font-extrabold text-white">Apply Filter</button>
         </form>
-        {historyDateSelected ? (
+        {records.length > 0 ? (
           <div className="mt-4 grid gap-3">
-            {selectedToday ? (
-              attendance ? (
-                <p className="rounded-lg border border-slate-200 p-3 text-sm font-semibold text-slate-600">
-                  Today&apos;s attendance is shown above.
-                </p>
-              ) : (
-                <EmptyState message="No attendance found for selected date." />
-              )
-            ) : records.length ? (
-              records.map((record) => <AttendanceHistoryRecord key={record.id} record={record} />)
-            ) : (
-              <EmptyState message="No attendance found for selected date." />
-            )}
+            {records.map((record) => (
+              <AttendanceHistoryRecord key={record.id} record={record} />
+            ))}
           </div>
-        ) : null}
+        ) : historyDateSelected ? (
+          <div className="mt-4">
+            <EmptyState message="No attendance found for selected date." />
+          </div>
+        ) : (
+          <div className="mt-4">
+            <EmptyState message="No attendance records available." />
+          </div>
+        )}
       </section>
     </>
   );

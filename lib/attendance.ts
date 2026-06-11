@@ -5,6 +5,17 @@ import { createClient } from "@/lib/supabase/server";
 import type { AttendanceRecord, OrganizationSettings } from "@/lib/types";
 
 const existingHalfDayThresholdHours = 4;
+const DEFAULT_HISTORY_DAYS = 10;
+
+function subtractDaysISO(isoDate: string, days: number): string {
+  const [year, month, day] = isoDate.split("-");
+  const date = new Date(Number(year), Number(month) - 1, Number(day));
+  date.setDate(date.getDate() - days);
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
 
 function logAttendanceRead(source: string, profileId: string, dateLabel: string, found: boolean, readSource: string, error?: string) {
   console.log(
@@ -64,6 +75,98 @@ export async function getMonthlyAttendanceForEmployee(profileId: string, monthSt
 
   console.log(
     `[attendance:${source}] employee=${profileId.slice(-8)} month_start=${monthStart} count=${fallbackData?.length ?? 0} source=server-fallback error=${fallbackError?.message ?? "none"}`
+  );
+  return (fallbackData ?? []) as AttendanceRecord[];
+}
+
+export async function getRecentAttendanceForEmployee(
+  profileId: string,
+  today: string,
+  source: string,
+  days: number = DEFAULT_HISTORY_DAYS
+) {
+  const startDate = subtractDaysISO(today, days);
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("attendance")
+    .select("*")
+    .eq("employee_id", profileId)
+    .gte("work_date", startDate)
+    .lte("work_date", today)
+    .order("work_date", { ascending: false })
+    .order("check_in_at", { ascending: false });
+
+  if ((data?.length ?? 0) > 0 || error) {
+    console.log(
+      `[attendance:${source}] employee=${profileId.slice(-8)} recent=${days}d start_date=${startDate} count=${data?.length ?? 0} source=session error=${error?.message ?? "none"}`
+    );
+    return (data ?? []) as AttendanceRecord[];
+  }
+
+  const admin = createAdminClient();
+  const { data: fallbackData, error: fallbackError } = await admin
+    .from("attendance")
+    .select("*")
+    .eq("employee_id", profileId)
+    .gte("work_date", startDate)
+    .lte("work_date", today)
+    .order("work_date", { ascending: false })
+    .order("check_in_at", { ascending: false });
+
+  console.log(
+    `[attendance:${source}] employee=${profileId.slice(-8)} recent=${days}d start_date=${startDate} count=${fallbackData?.length ?? 0} source=server-fallback error=${fallbackError?.message ?? "none"}`
+  );
+  return (fallbackData ?? []) as AttendanceRecord[];
+}
+
+export async function getRecentAttendanceForAll(
+  today: string,
+  source: string,
+  employeeId?: string,
+  days: number = DEFAULT_HISTORY_DAYS
+) {
+  const startDate = subtractDaysISO(today, days);
+  const supabase = await createClient();
+
+  let query = supabase
+    .from("attendance")
+    .select("*, profiles(id, full_name, department, department_id, designation)")
+    .gte("work_date", startDate)
+    .lte("work_date", today)
+    .order("work_date", { ascending: false })
+    .order("check_in_at", { ascending: false });
+
+  if (employeeId) {
+    query = query.eq("employee_id", employeeId);
+  }
+
+  const { data, error } = await query;
+
+  if ((data?.length ?? 0) > 0 || error) {
+    console.log(
+      `[attendance:${source}] recent=${days}d start_date=${startDate} employee=${employeeId?.slice(-8) ?? "all"} count=${data?.length ?? 0} source=session error=${error?.message ?? "none"}`
+    );
+    return (data ?? []) as AttendanceRecord[];
+  }
+
+  const admin = createAdminClient();
+
+  let adminQuery = admin
+    .from("attendance")
+    .select("*, profiles(id, full_name, department, department_id, designation)")
+    .gte("work_date", startDate)
+    .lte("work_date", today)
+    .order("work_date", { ascending: false })
+    .order("check_in_at", { ascending: false });
+
+  if (employeeId) {
+    adminQuery = adminQuery.eq("employee_id", employeeId);
+  }
+
+  const { data: fallbackData, error: fallbackError } = await adminQuery;
+
+  console.log(
+    `[attendance:${source}] recent=${days}d start_date=${startDate} employee=${employeeId?.slice(-8) ?? "all"} count=${fallbackData?.length ?? 0} source=server-fallback error=${fallbackError?.message ?? "none"}`
   );
   return (fallbackData ?? []) as AttendanceRecord[];
 }
