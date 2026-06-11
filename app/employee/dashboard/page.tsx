@@ -61,9 +61,18 @@ export default async function EmployeeDashboardPage({
             <StatusBadge tone="attendance">{attendanceStatus}</StatusBadge>
           </div>
           <div className="mt-4 grid gap-2 text-sm text-slate-600">
-            <p>Check in: {formatDateTime(todayAttendance?.check_in_at)}</p>
-            <p>Check out: {formatDateTime(todayAttendance?.check_out_at)}</p>
-            <p>Total hours: {todayAttendance?.total_hours ?? "-"}</p>
+            <div>
+              <p className="font-medium">Check in</p>
+              <p>{formatDateTime(todayAttendance?.check_in_at)}</p>
+            </div>
+            <div>
+              <p className="font-medium">Check out</p>
+              <p>{formatDateTime(todayAttendance?.check_out_at)}</p>
+            </div>
+            <div>
+              <p className="font-medium">Total hours</p>
+              <p>{todayAttendance?.total_hours ?? "-"}</p>
+            </div>
           </div>
           <div className="mt-4 grid gap-2 sm:grid-cols-2">
             <form action={checkIn}>

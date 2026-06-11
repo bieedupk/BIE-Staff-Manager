@@ -53,10 +53,19 @@ export default async function EmployeeAttendancePage({
           </div>
           <StatusBadge tone="attendance">{attendanceStatus}</StatusBadge>
         </div>
-        <div className="mt-4 grid gap-2 text-sm text-slate-600 sm:grid-cols-3">
-          <p>Check in: {formatDateTime(attendance?.check_in_at)}</p>
-          <p>Check out: {formatDateTime(attendance?.check_out_at)}</p>
-          <p>Total: {attendance?.total_hours ?? "-"} hrs</p>
+        <div className="mt-4 grid gap-2 text-sm text-slate-600 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+          <div>
+            <p className="font-medium">Check in</p>
+            <p>{formatDateTime(attendance?.check_in_at)}</p>
+          </div>
+          <div>
+            <p className="font-medium">Check out</p>
+            <p>{formatDateTime(attendance?.check_out_at)}</p>
+          </div>
+          <div>
+            <p className="font-medium">Total</p>
+            <p>{attendance?.total_hours ?? "-"} hrs</p>
+          </div>
         </div>
         {!attendance ? <div className="mt-4"><EmptyState message="No attendance recorded for today." /></div> : null}
         <div className="mt-4 grid gap-2 sm:grid-cols-2">
@@ -119,9 +128,11 @@ function AttendanceHistoryRecord({ record }: { record: AttendanceRecord }) {
         <p className="font-extrabold text-slate-950">{formatDate(record.work_date)}</p>
         <StatusBadge tone="attendance">{record.status}</StatusBadge>
       </div>
-      <p className="mt-2 text-sm text-slate-600">
-        {formatDateTime(record.check_in_at)} to {formatDateTime(record.check_out_at)} - {record.total_hours ?? "-"} hrs
-      </p>
+      <div className="mt-2 grid gap-1 text-sm text-slate-600">
+        <p><span className="font-medium">Check in:</span> {formatDateTime(record.check_in_at)}</p>
+        <p><span className="font-medium">Check out:</span> {formatDateTime(record.check_out_at)}</p>
+        <p><span className="font-medium">Total:</span> {record.total_hours ?? "-"} hrs</p>
+      </div>
     </article>
   );
 }

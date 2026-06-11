@@ -153,11 +153,23 @@ export default async function AdminAttendancePage({ searchParams }: Props) {
                     ) : null}
                   </div>
                   {statusFilter === "all" ? (
-                    <dl className="mt-3 grid gap-2 text-sm text-slate-600 sm:grid-cols-2 xl:grid-cols-4">
-                      <div>Date: {formatDate(record.work_date)}</div>
-                      <div>Check in: {formatDateTime(record.check_in_at)}</div>
-                      <div>Check out: {formatDateTime(record.check_out_at)}</div>
-                      <div>Total hours: {formatDurationFromHours(record.total_hours)}</div>
+                    <dl className="mt-3 grid gap-2 text-sm text-slate-600 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                      <div>
+                        <p className="font-medium text-slate-700">Date</p>
+                        <p>{formatDate(record.work_date)}</p>
+                      </div>
+                      <div>
+                        <p className="font-medium text-slate-700">Check in</p>
+                        <p>{formatDateTime(record.check_in_at)}</p>
+                      </div>
+                      <div>
+                        <p className="font-medium text-slate-700">Check out</p>
+                        <p>{formatDateTime(record.check_out_at)}</p>
+                      </div>
+                      <div>
+                        <p className="font-medium text-slate-700">Total hours</p>
+                        <p>{formatDurationFromHours(record.total_hours)}</p>
+                      </div>
                     </dl>
                   ) : null}
                 </article>
