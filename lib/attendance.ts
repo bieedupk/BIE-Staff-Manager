@@ -2,7 +2,7 @@ import "server-only";
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
-import type { AttendanceRecord, OrganizationSettings } from "@/lib/types";
+import type { AttendanceRecord, OrganizationSettings, Profile } from "@/lib/types";
 
 const existingHalfDayThresholdHours = 4;
 const DEFAULT_HISTORY_DAYS = 10;
@@ -15,6 +15,24 @@ function subtractDaysISO(isoDate: string, days: number): string {
   const m = String(date.getMonth() + 1).padStart(2, "0");
   const d = String(date.getDate()).padStart(2, "0");
   return `${y}-${m}-${d}`;
+}
+
+function getDateRange(startISO: string, endISO: string): string[] {
+  const dates: string[] = [];
+  const [startY, startM, startD] = startISO.split("-").map(Number);
+  const [endY, endM, endD] = endISO.split("-").map(Number);
+  const current = new Date(startY, startM - 1, startD);
+  const end = new Date(endY, endM - 1, endD);
+
+  while (current <= end) {
+    const y = current.getFullYear();
+    const m = String(current.getMonth() + 1).padStart(2, "0");
+    const d = String(current.getDate()).padStart(2, "0");
+    dates.push(`${y}-${m}-${d}`);
+    current.setDate(current.getDate() + 1);
+  }
+
+  return dates;
 }
 
 function logAttendanceRead(source: string, profileId: string, dateLabel: string, found: boolean, readSource: string, error?: string) {
@@ -89,7 +107,7 @@ export async function getRecentAttendanceForEmployee(
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("attendance")
-    .select("*")
+    .select("*, profiles(id, full_name, email, department, department_id, designation)")
     .eq("employee_id", profileId)
     .gte("work_date", startDate)
     .lte("work_date", today)
@@ -106,7 +124,7 @@ export async function getRecentAttendanceForEmployee(
   const admin = createAdminClient();
   const { data: fallbackData, error: fallbackError } = await admin
     .from("attendance")
-    .select("*")
+    .select("*, profiles(id, full_name, email, department, department_id, designation)")
     .eq("employee_id", profileId)
     .gte("work_date", startDate)
     .lte("work_date", today)
@@ -169,6 +187,51 @@ export async function getRecentAttendanceForAll(
     `[attendance:${source}] recent=${days}d start_date=${startDate} employee=${employeeId?.slice(-8) ?? "all"} count=${fallbackData?.length ?? 0} source=server-fallback error=${fallbackError?.message ?? "none"}`
   );
   return (fallbackData ?? []) as AttendanceRecord[];
+}
+
+export function createSyntheticAbsentRecord(
+  employeeId: string,
+  workDate: string,
+  profile: Pick<Profile, "id" | "full_name" | "email" | "department" | "department_id" | "designation">
+): AttendanceRecord {
+  return {
+    id: `synthetic-absent-${employeeId}-${workDate}`,
+    employee_id: employeeId,
+    work_date: workDate,
+    check_in_at: null,
+    check_out_at: null,
+    total_hours: null,
+    status: "Absent",
+    created_at: new Date().toISOString(),
+    profiles: profile
+  };
+}
+
+export function buildCompleteTimelineWithAbsent(
+  actualRecords: AttendanceRecord[],
+  employee: Profile,
+  startDate: string,
+  endDate: string
+): AttendanceRecord[] {
+  const recordsByDate = new Map(actualRecords.map((r) => [r.work_date, r]));
+  const dates = getDateRange(startDate, endDate);
+
+  const timeline = dates
+    .reverse() // Latest first
+    .map((date) => {
+      const existing = recordsByDate.get(date);
+      if (existing) return existing;
+      return createSyntheticAbsentRecord(employee.id, date, {
+        id: employee.id,
+        full_name: employee.full_name,
+        email: employee.email,
+        department: employee.department,
+        department_id: employee.department_id,
+        designation: employee.designation
+      });
+    });
+
+  return timeline;
 }
 
 export function attendanceDisplayStatus(attendance: AttendanceRecord | null) {

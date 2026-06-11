@@ -2,11 +2,23 @@ import { checkIn, checkOut } from "@/app/actions/attendance";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { attendanceDisplayStatus, getTodayAttendanceForEmployee, getRecentAttendanceForEmployee } from "@/lib/attendance";
+import { attendanceDisplayStatus, getTodayAttendanceForEmployee, getRecentAttendanceForEmployee, buildCompleteTimelineWithAbsent } from "@/lib/attendance";
 import { requireEmployeeProfile } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import type { AttendanceRecord } from "@/lib/types";
 import { formatDate, formatDateTime, todayISO } from "@/lib/utils";
+
+const DEFAULT_HISTORY_DAYS = 10;
+
+function subtractDaysISO(isoDate: string, days: number): string {
+  const [year, month, day] = isoDate.split("-");
+  const date = new Date(Number(year), Number(month) - 1, Number(day));
+  date.setDate(date.getDate() - days);
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -32,15 +44,18 @@ export default async function EmployeeAttendancePage({
     getTodayAttendanceForEmployee(profile.id, today, "employee-attendance"),
     (async () => {
       if (historyDateSelected && !selectedToday) {
+        // Specific date filter
         const { data } = await supabase
           .from("attendance")
-          .select("*")
+          .select("*, profiles(id, full_name, email, department, department_id, designation)")
           .eq("employee_id", profile.id)
           .eq("work_date", historyDate)
           .order("check_in_at", { ascending: false });
         return (data ?? []) as AttendanceRecord[];
       } else if (!historyDateSelected) {
-        return await getRecentAttendanceForEmployee(profile.id, today, "employee-attendance");
+        // Default: recent history with complete timeline including absent days
+        const recentRecords = await getRecentAttendanceForEmployee(profile.id, today, "employee-attendance");
+        return buildCompleteTimelineWithAbsent(recentRecords, profile, subtractDaysISO(today, DEFAULT_HISTORY_DAYS), today);
       }
       return [] as AttendanceRecord[];
     })()

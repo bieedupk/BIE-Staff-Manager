@@ -2,7 +2,7 @@ import Link from "next/link";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { deriveAttendanceFlags, formatDurationFromHours, getRecentAttendanceForAll } from "@/lib/attendance";
+import { deriveAttendanceFlags, formatDurationFromHours, getRecentAttendanceForAll, buildCompleteTimelineWithAbsent } from "@/lib/attendance";
 import { requireAdminProfile } from "@/lib/auth";
 import { departmentTextForProfile, fetchEmployeeDepartmentsByEmployee } from "@/lib/employee-departments";
 import { getOrganizationSettings } from "@/lib/organization-settings";
@@ -28,6 +28,18 @@ const attendanceFilters = [
 ] as const;
 
 type AttendanceFilter = (typeof attendanceFilters)[number]["value"];
+
+const DEFAULT_HISTORY_DAYS = 10;
+
+function subtractDaysISO(isoDate: string, days: number): string {
+  const [year, month, day] = isoDate.split("-");
+  const date = new Date(Number(year), Number(month) - 1, Number(day));
+  date.setDate(date.getDate() - days);
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
 
 export default async function AdminAttendancePage({ searchParams }: Props) {
   const resolvedSearchParams = await searchParams;
@@ -58,7 +70,7 @@ export default async function AdminAttendancePage({ searchParams }: Props) {
     // User selected a specific date - fetch only that date
     let attendanceQuery = supabase
       .from("attendance")
-      .select("*, profiles(id, full_name, department, department_id, designation)")
+      .select("*, profiles(id, full_name, email, department, department_id, designation)")
       .eq("work_date", selectedDate)
       .order("check_in_at", { ascending: false });
 
@@ -79,21 +91,77 @@ export default async function AdminAttendancePage({ searchParams }: Props) {
     }
 
     attendanceRows = (data ?? []) as AttendanceRecord[];
+
+    // For specific date, add synthetic absent records for employees not present
+    const presentIds = new Set(attendanceRows.map((r) => r.employee_id));
+    const absentEmployees = employees.filter((emp) => !presentIds.has(emp.id));
+    for (const employee of absentEmployees) {
+      attendanceRows.push({
+        id: `synthetic-absent-${employee.id}-${selectedDate}`,
+        employee_id: employee.id,
+        work_date: selectedDate,
+        check_in_at: null,
+        check_out_at: null,
+        total_hours: null,
+        status: "Absent",
+        created_at: new Date().toISOString(),
+        profiles: {
+          id: employee.id,
+          full_name: employee.full_name,
+          email: employee.email,
+          department: employee.department,
+          department_id: employee.department_id,
+          designation: employee.designation
+        }
+      });
+    }
+
+    // Sort by date descending
+    attendanceRows.sort((a, b) => b.work_date.localeCompare(a.work_date));
   } else {
-    // Default: show recent history
+    // Default: show recent history with complete timeline
+    const startDate = subtractDaysISO(today, DEFAULT_HISTORY_DAYS);
     const recentData = await getRecentAttendanceForAll(today, "admin-attendance", employeeFilter || undefined);
+
+    // Group records by employee
+    const recordsByEmployee = new Map<string, AttendanceRecord[]>();
+    for (const record of recentData) {
+      const empId = record.employee_id;
+      if (!recordsByEmployee.has(empId)) {
+        recordsByEmployee.set(empId, []);
+      }
+      recordsByEmployee.get(empId)!.push(record);
+    }
+
+    // Build complete timeline for each employee
+    const allRecords: AttendanceRecord[] = [];
+    for (const employee of employees) {
+      if (employeeFilter && employee.id !== employeeFilter) continue;
+      const employeeRecords = recordsByEmployee.get(employee.id) ?? [];
+      const timeline = buildCompleteTimelineWithAbsent(employeeRecords, employee, startDate, today);
+      allRecords.push(...timeline);
+    }
+
+    // Sort by date descending, then by check-in descending
+    allRecords.sort((a, b) => {
+      const dateCmp = b.work_date.localeCompare(a.work_date);
+      if (dateCmp !== 0) return dateCmp;
+      const aCheckIn = a.check_in_at ?? "";
+      const bCheckIn = b.check_in_at ?? "";
+      return bCheckIn.localeCompare(aCheckIn);
+    });
+
+    attendanceRows = allRecords;
 
     if (process.env.NODE_ENV !== "production") {
       console.info("[attendance:admin]", {
         mode: "recent-history",
         adminProfileId: currentProfile.id,
         adminRole: currentProfile.role,
-        attendanceFetchedCount: recentData.length,
+        attendanceFetchedCount: attendanceRows.length,
         employeeFilter: employeeFilter || "all"
       });
     }
-
-    attendanceRows = recentData;
   }
 
   const selectedAttendance = attendanceRows as AttendanceRecord[];
@@ -102,16 +170,13 @@ export default async function AdminAttendancePage({ searchParams }: Props) {
     ...employees.map((employee) => employee.id),
     ...selectedAttendance.map((record) => record.employee_id)
   ]);
-  const presentIds = new Set(selectedAttendance.map((record) => record.employee_id));
-  const absentEmployees = dateParamProvided ? employees.filter((employee) => !presentIds.has(employee.id)) : [];
 
   const filteredAttendance =
     statusFilter === "all"
       ? selectedAttendance
       : statusFilter === "absent"
-        ? []
+        ? selectedAttendance.filter((record) => record.status === "Absent")
         : selectedAttendance.filter((record) => attendanceMatchesFilter(attendanceFlagsByRecordId.get(record.id), statusFilter));
-  const showAbsentEmployees = (statusFilter === "all" || statusFilter === "absent") && dateParamProvided;
 
   return (
     <>
@@ -177,65 +242,57 @@ export default async function AdminAttendancePage({ searchParams }: Props) {
           {dateParamProvided ? "Records" : "Recent Attendance"}
         </h2>
           <div className="mt-4 grid gap-3">
-            {filteredAttendance.length || (showAbsentEmployees && absentEmployees.length) ? (
-              <>
-              {filteredAttendance.map((record) => (
+            {filteredAttendance.length ? (
+              filteredAttendance.map((record) => (
                 <article key={record.id} className="rounded-lg border border-slate-200 p-3">
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <p className="font-extrabold text-slate-950">{record.profiles?.full_name || "Employee"}</p>
+                      <p className="font-extrabold text-slate-950">{record.profiles?.full_name ?? "Unknown Employee"}</p>
                       <p className="text-sm font-medium text-slate-500">
-                        {record.profiles ? departmentTextForProfile(record.profiles, assignmentsByEmployee) : "Not assigned"} | {record.profiles?.designation || "-"}
+                        {record.profiles
+                          ? `${departmentTextForProfile(record.profiles, assignmentsByEmployee)} | ${record.profiles.designation ?? "No designation"}`
+                          : "Not assigned | No designation"}
                       </p>
                     </div>
-                    {statusFilter === "all" ? (
-                      <div className="flex flex-wrap justify-end gap-2">
-                        {(attendanceFlagsByRecordId.get(record.id)?.displayStatuses ?? [record.status]).map((status) => (
-                          <StatusBadge key={status} tone="attendance">{status}</StatusBadge>
-                        ))}
-                      </div>
-                    ) : null}
+                    <div className="flex flex-wrap justify-end gap-2">
+                      {(attendanceFlagsByRecordId.get(record.id)?.displayStatuses ?? [record.status]).map((status) => (
+                        <StatusBadge key={status} tone="attendance">
+                          {status}
+                        </StatusBadge>
+                      ))}
+                    </div>
                   </div>
-                  {statusFilter === "all" ? (
-                    <dl className="mt-3 grid gap-2 text-sm text-slate-600 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                      <div>
-                        <p className="font-medium text-slate-700">Date</p>
-                        <p>{formatDate(record.work_date)}</p>
-                      </div>
-                      <div>
-                        <p className="font-medium text-slate-700">Check in</p>
-                        <p>{formatDateTime(record.check_in_at)}</p>
-                      </div>
-                      <div>
-                        <p className="font-medium text-slate-700">Check out</p>
-                        <p>{formatDateTime(record.check_out_at)}</p>
-                      </div>
-                      <div>
-                        <p className="font-medium text-slate-700">Total hours</p>
-                        <p>{formatDurationFromHours(record.total_hours)}</p>
-                      </div>
-                    </dl>
-                  ) : null}
+                  <dl className="mt-3 grid gap-2 text-sm text-slate-600 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                    <div>
+                      <p className="font-medium text-slate-700">Date</p>
+                      <p>{formatDate(record.work_date)}</p>
+                    </div>
+                    <div>
+                      <p className="font-medium text-slate-700">Check in</p>
+                      <p>{formatDateTime(record.check_in_at)}</p>
+                    </div>
+                    <div>
+                      <p className="font-medium text-slate-700">Check out</p>
+                      <p>{formatDateTime(record.check_out_at)}</p>
+                    </div>
+                    <div>
+                      <p className="font-medium text-slate-700">Total hours</p>
+                      <p>{formatDurationFromHours(record.total_hours)}</p>
+                    </div>
+                  </dl>
                 </article>
-              ))}
-              {showAbsentEmployees
-                ? absentEmployees.map((employee) => (
-                    <AttendanceEmployeeCard
-                      key={`absent-${employee.id}`}
-                      name={employee.full_name}
-                      department={departmentTextForProfile(employee, assignmentsByEmployee)}
-                      status="Absent"
-                    />
-                  ))
-                : null}
-              </>
+              ))
             ) : (
-              <EmptyState 
+              <EmptyState
                 message={
-                  statusFilter === "absent" 
-                    ? (dateParamProvided ? "No absent employees for selected date." : "No absent records available.")
-                    : (dateParamProvided ? "No attendance found for selected date." : "No attendance records available.")
-                } 
+                  statusFilter === "absent"
+                    ? dateParamProvided
+                      ? "No absent employees for selected date."
+                      : "No absent records in recent history."
+                    : dateParamProvided
+                      ? "No attendance found for selected date."
+                      : "No attendance records available."
+                }
               />
             )}
           </div>
@@ -266,18 +323,4 @@ function attendanceStatusPath(status: AttendanceFilter, employee: string, date: 
   if (dateWasProvided && date) params.set("date", date);
 
   return `/admin/attendance?${params.toString()}`;
-}
-
-function AttendanceEmployeeCard({ name, department, status }: { name: string; department: string; status: "Absent" }) {
-  return (
-    <article className="rounded-lg border border-slate-200 p-3">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="font-extrabold text-slate-950">{name}</p>
-          <p className="text-sm font-medium text-slate-500">{department}</p>
-        </div>
-        <StatusBadge tone="attendance">{status}</StatusBadge>
-      </div>
-    </article>
-  );
 }
