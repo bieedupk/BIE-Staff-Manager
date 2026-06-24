@@ -62,6 +62,7 @@ export default async function AdminAttendancePage({ searchParams }: Props) {
     .order("full_name");
 
   const employees = (profiles ?? []) as Profile[];
+  const profilesById = new Map(employees.map((employee) => [employee.id, employee]));
 
   // Decide whether to show recent history or a specific date
   let attendanceRows: AttendanceRecord[] = [];
@@ -90,7 +91,7 @@ export default async function AdminAttendancePage({ searchParams }: Props) {
       });
     }
 
-    attendanceRows = (data ?? []) as AttendanceRecord[];
+    attendanceRows = attachProfilesToAttendanceRows((data ?? []) as AttendanceRecord[], profilesById);
 
     // For specific date, add synthetic absent records for employees not present
     const presentIds = new Set(attendanceRows.map((r) => r.employee_id));
@@ -121,7 +122,10 @@ export default async function AdminAttendancePage({ searchParams }: Props) {
   } else {
     // Default: show recent history with complete timeline
     const startDate = subtractDaysISO(today, DEFAULT_HISTORY_DAYS);
-    const recentData = await getRecentAttendanceForAll(today, "admin-attendance", employeeFilter || undefined);
+    const recentData = attachProfilesToAttendanceRows(
+      await getRecentAttendanceForAll(today, "admin-attendance", employeeFilter || undefined),
+      profilesById
+    );
 
     // Group records by employee
     const recordsByEmployee = new Map<string, AttendanceRecord[]>();
@@ -314,6 +318,13 @@ function attendanceMatchesFilter(flags: ReturnType<typeof deriveAttendanceFlags>
   if (status === "late") return flags.isLate;
   if (status === "half-day") return flags.isHalfDay;
   return false;
+}
+
+function attachProfilesToAttendanceRows(records: AttendanceRecord[], profilesById: Map<string, Profile>): AttendanceRecord[] {
+  return records.map((record) => ({
+    ...record,
+    profiles: profilesById.get(record.employee_id) ?? null
+  }));
 }
 
 function attendanceStatusPath(status: AttendanceFilter, employee: string, date: string, dateWasProvided: boolean) {
