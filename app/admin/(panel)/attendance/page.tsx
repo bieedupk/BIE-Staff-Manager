@@ -1,5 +1,6 @@
 import { correctAttendance } from "@/app/actions/attendance";
 import Link from "next/link";
+import { AttendanceCorrectionHours } from "@/components/admin/attendance-correction-hours";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatusBadge } from "@/components/ui/status-badge";
@@ -311,24 +312,10 @@ export default async function AdminAttendancePage({ searchParams }: Props) {
                             className="min-h-11 rounded-lg border border-slate-300 px-3"
                           />
                         </label>
-                        <label className="grid gap-1 text-sm font-bold text-slate-700">
-                          Check in time
-                          <input
-                            name="check_in_time"
-                            type="time"
-                            defaultValue={formatTimeInputValue(record.check_in_at, settings.timezone)}
-                            className="min-h-11 rounded-lg border border-slate-300 px-3"
-                          />
-                        </label>
-                        <label className="grid gap-1 text-sm font-bold text-slate-700">
-                          Check out time
-                          <input
-                            name="check_out_time"
-                            type="time"
-                            defaultValue={formatTimeInputValue(record.check_out_at, settings.timezone)}
-                            className="min-h-11 rounded-lg border border-slate-300 px-3"
-                          />
-                        </label>
+                        <AttendanceCorrectionHours
+                          initialCheckInTime={formatTimeInputValue(record.check_in_at, settings.timezone)}
+                          initialCheckOutTime={formatTimeInputValue(record.check_out_at, settings.timezone)}
+                        />
                         <label className="grid gap-1 text-sm font-bold text-slate-700">
                           Status
                           <select name="status" defaultValue={record.status} className="min-h-11 rounded-lg border border-slate-300 px-3">
@@ -338,17 +325,6 @@ export default async function AdminAttendancePage({ searchParams }: Props) {
                               </option>
                             ))}
                           </select>
-                        </label>
-                        <label className="grid gap-1 text-sm font-bold text-slate-700">
-                          Total hours
-                          <input
-                            name="total_hours"
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            defaultValue={record.total_hours ?? ""}
-                            className="min-h-11 rounded-lg border border-slate-300 px-3"
-                          />
                         </label>
                         <label className="grid gap-1 text-sm font-bold text-slate-700 md:col-span-2 xl:col-span-4">
                           Correction reason
