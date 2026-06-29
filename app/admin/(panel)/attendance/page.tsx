@@ -293,7 +293,7 @@ export default async function AdminAttendancePage({ searchParams }: Props) {
                       <p>{formatDurationFromHours(record.total_hours)}</p>
                     </div>
                   </dl>
-                  {canCorrectAttendance && !isSyntheticAbsentRecord(record) ? (
+                  {canCorrectAttendance ? (
                     <details className="mt-3 border-t border-slate-100 pt-3">
                       <summary className="cursor-pointer text-sm font-extrabold text-bie-700">Correct attendance</summary>
                       <form action={correctAttendance} className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
@@ -301,6 +301,9 @@ export default async function AdminAttendancePage({ searchParams }: Props) {
                         <input type="hidden" name="date" value={selectedDate} />
                         <input type="hidden" name="employee" value={employeeFilter} />
                         <input type="hidden" name="status_filter" value={statusFilter} />
+                        {isSyntheticAbsentRecord(record) && (
+                          <input type="hidden" name="employee_id" value={record.employee_id} />
+                        )}
                         <label className="grid gap-1 text-sm font-bold text-slate-700">
                           Correction date
                           <input

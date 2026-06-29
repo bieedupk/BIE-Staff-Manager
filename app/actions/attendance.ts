@@ -226,66 +226,163 @@ export async function correctAttendance(formData: FormData) {
     redirectWithAttendanceCorrectionMessage(returnPath, "error", "Correction date is required.");
   }
 
-  if (!id || id.startsWith("synthetic-absent-")) {
-    redirectWithAttendanceCorrectionMessage(returnPath, "error", "Synthetic absent rows cannot be corrected.");
+  if (!id) {
+    redirectWithAttendanceCorrectionMessage(returnPath, "error", "Attendance record id is required.");
   }
 
-  const { data: existingAttendance, error: fetchError } = await supabase
-    .from("attendance")
-    .select("id, work_date, check_in_at, check_out_at, status, total_hours")
-    .eq("id", id)
-    .maybeSingle();
-
-  if (fetchError || !existingAttendance) {
-    redirectWithAttendanceCorrectionMessage(returnPath, "error", "Attendance record does not exist.");
-  }
-
-  const status = String(formData.get("status") || existingAttendance.status || "Present");
+  const isSyntheticAbsent = id.startsWith("synthetic-absent-");
+  const status = String(formData.get("status") || "Present");
 
   const checkInAt = buildTimestampFromDateAndTime(correctionDate, checkInTime, settings.timezone);
   const checkOutAt = buildTimestampFromDateAndTime(correctionDate, checkOutTime, settings.timezone);
 
-  const updates: Record<string, unknown> = {
-    check_in_at: checkInAt,
-    check_out_at: checkOutAt,
-    status,
-    total_hours: totalHours,
-    updated_at: new Date().toISOString()
-  };
+  if (isSyntheticAbsent) {
+    // Handle synthetic absent row correction
+    const employeeId = String(formData.get("employee_id") || "").trim();
+    if (!employeeId) {
+      redirectWithAttendanceCorrectionMessage(returnPath, "error", "Employee id is required for synthetic absent correction.");
+    }
 
-  if (correctionDate && existingAttendance.work_date && existingAttendance.work_date !== correctionDate) {
-    updates.work_date = correctionDate;
+    // Check if attendance already exists for this employee_id and correction_date
+    const { data: existingByDate, error: checkError } = await supabase
+      .from("attendance")
+      .select("id, work_date, check_in_at, check_out_at, status, total_hours")
+      .eq("employee_id", employeeId)
+      .eq("work_date", correctionDate)
+      .maybeSingle();
+
+    if (checkError && checkError.code !== "PGRST116") {
+      redirectWithAttendanceCorrectionMessage(returnPath, "error", "Could not check existing attendance records.");
+    }
+
+    if (existingByDate) {
+      // Update existing attendance record
+      const updates: Record<string, unknown> = {
+        check_in_at: checkInAt,
+        check_out_at: checkOutAt,
+        status,
+        total_hours: totalHours,
+        updated_at: new Date().toISOString()
+      };
+
+      const { data: updatedAttendance, error } = await supabase
+        .from("attendance")
+        .update(updates)
+        .eq("id", existingByDate.id)
+        .select("id")
+        .maybeSingle();
+
+      if (error || !updatedAttendance) {
+        redirectWithAttendanceCorrectionMessage(returnPath, "error", "Attendance correction could not be saved.");
+      }
+
+      const auditDetails: Record<string, unknown> = {
+        old_check_in_at: existingByDate.check_in_at,
+        old_check_out_at: existingByDate.check_out_at,
+        old_status: existingByDate.status,
+        old_total_hours: existingByDate.total_hours,
+        old_work_date: existingByDate.work_date,
+        new_check_in_at: checkInAt,
+        new_check_out_at: checkOutAt,
+        new_status: status,
+        new_total_hours: totalHours,
+        new_work_date: correctionDate,
+        correction_reason: correctionReason
+      };
+
+      await logAudit("attendance_corrected", "attendance", existingByDate.id, auditDetails);
+    } else {
+      // Insert new attendance record from synthetic absent correction
+      const { data: insertedAttendance, error: insertError } = await supabase
+        .from("attendance")
+        .insert({
+          employee_id: employeeId,
+          work_date: correctionDate,
+          check_in_at: checkInAt,
+          check_out_at: checkOutAt,
+          status,
+          total_hours: totalHours,
+          updated_at: new Date().toISOString()
+        })
+        .select("id")
+        .maybeSingle();
+
+      if (insertError || !insertedAttendance) {
+        redirectWithAttendanceCorrectionMessage(returnPath, "error", "Attendance correction could not be saved.");
+      }
+
+      const auditDetails: Record<string, unknown> = {
+        old_check_in_at: null,
+        old_check_out_at: null,
+        old_status: "Absent",
+        old_total_hours: null,
+        old_work_date: correctionDate,
+        new_check_in_at: checkInAt,
+        new_check_out_at: checkOutAt,
+        new_status: status,
+        new_total_hours: totalHours,
+        new_work_date: correctionDate,
+        correction_reason: correctionReason,
+        created_from_synthetic_absent: true
+      };
+
+      await logAudit("attendance_corrected", "attendance", insertedAttendance.id, auditDetails);
+    }
+  } else {
+    // Handle real attendance record correction (existing logic)
+    const { data: existingAttendance, error: fetchError } = await supabase
+      .from("attendance")
+      .select("id, work_date, check_in_at, check_out_at, status, total_hours")
+      .eq("id", id)
+      .maybeSingle();
+
+    if (fetchError || !existingAttendance) {
+      redirectWithAttendanceCorrectionMessage(returnPath, "error", "Attendance record does not exist.");
+    }
+
+    const updates: Record<string, unknown> = {
+      check_in_at: checkInAt,
+      check_out_at: checkOutAt,
+      status,
+      total_hours: totalHours,
+      updated_at: new Date().toISOString()
+    };
+
+    if (correctionDate && existingAttendance.work_date && existingAttendance.work_date !== correctionDate) {
+      updates.work_date = correctionDate;
+    }
+
+    const { data: updatedAttendance, error } = await supabase
+      .from("attendance")
+      .update(updates)
+      .eq("id", id)
+      .select("id")
+      .maybeSingle();
+
+    if (error || !updatedAttendance) {
+      redirectWithAttendanceCorrectionMessage(returnPath, "error", "Attendance correction could not be saved.");
+    }
+
+    const auditDetails: Record<string, unknown> = {
+      old_check_in_at: existingAttendance.check_in_at,
+      old_check_out_at: existingAttendance.check_out_at,
+      old_status: existingAttendance.status,
+      old_total_hours: existingAttendance.total_hours,
+      new_check_in_at: checkInAt,
+      new_check_out_at: checkOutAt,
+      new_status: status,
+      new_total_hours: totalHours,
+      correction_reason: correctionReason
+    };
+
+    if (existingAttendance.work_date && correctionDate && existingAttendance.work_date !== correctionDate) {
+      auditDetails.old_work_date = existingAttendance.work_date;
+      auditDetails.new_work_date = correctionDate;
+    }
+
+    await logAudit("attendance_corrected", "attendance", id, auditDetails);
   }
 
-  const { data: updatedAttendance, error } = await supabase
-    .from("attendance")
-    .update(updates)
-    .eq("id", id)
-    .select("id")
-    .maybeSingle();
-
-  if (error || !updatedAttendance) {
-    redirectWithAttendanceCorrectionMessage(returnPath, "error", "Attendance correction could not be saved.");
-  }
-
-  const auditDetails: Record<string, unknown> = {
-    old_check_in_at: existingAttendance.check_in_at,
-    old_check_out_at: existingAttendance.check_out_at,
-    old_status: existingAttendance.status,
-    old_total_hours: existingAttendance.total_hours,
-    new_check_in_at: checkInAt,
-    new_check_out_at: checkOutAt,
-    new_status: status,
-    new_total_hours: totalHours,
-    correction_reason: correctionReason
-  };
-
-  if (existingAttendance.work_date && correctionDate && existingAttendance.work_date !== correctionDate) {
-    auditDetails.old_work_date = existingAttendance.work_date;
-    auditDetails.new_work_date = correctionDate;
-  }
-
-  await logAudit("attendance_corrected", "attendance", id, auditDetails);
   revalidatePath("/admin/attendance");
   redirectWithAttendanceCorrectionMessage(adminAttendancePath(formData, "All"), "success", "Attendance correction saved.");
 }
