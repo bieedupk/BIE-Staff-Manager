@@ -1,3 +1,4 @@
+import { correctAttendance } from "@/app/actions/attendance";
 import Link from "next/link";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
@@ -16,6 +17,8 @@ type Props = {
     status?: string;
     employee?: string;
     date?: string;
+    attendance_correction_success?: string;
+    attendance_correction_error?: string;
   }>;
 };
 
@@ -30,6 +33,7 @@ const attendanceFilters = [
 type AttendanceFilter = (typeof attendanceFilters)[number]["value"];
 
 const DEFAULT_HISTORY_DAYS = 10;
+const attendanceCorrectionStatuses = ["Present", "Late", "Half Day", "Absent"] as const;
 
 function subtractDaysISO(isoDate: string, days: number): string {
   const [year, month, day] = isoDate.split("-");
@@ -185,6 +189,10 @@ export default async function AdminAttendancePage({ searchParams }: Props) {
   return (
     <>
       <PageHeader title="Attendance" subtitle="View today's attendance and employee-wise attendance history." backHref="/admin/dashboard" />
+      <AttendanceCorrectionMessage
+        success={resolvedSearchParams?.attendance_correction_success}
+        error={resolvedSearchParams?.attendance_correction_error}
+      />
 
       <section className="mb-5 rounded-lg border border-emerald-100 bg-white p-4 shadow-soft">
         <div className="mb-4 flex flex-col gap-2 sm:items-center sm:justify-between">
@@ -284,6 +292,69 @@ export default async function AdminAttendancePage({ searchParams }: Props) {
                       <p>{formatDurationFromHours(record.total_hours)}</p>
                     </div>
                   </dl>
+                  {canCorrectAttendance && !isSyntheticAbsentRecord(record) ? (
+                    <details className="mt-3 border-t border-slate-100 pt-3">
+                      <summary className="cursor-pointer text-sm font-extrabold text-bie-700">Correct attendance</summary>
+                      <form action={correctAttendance} className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+                        <input type="hidden" name="id" value={record.id} />
+                        <input type="hidden" name="date" value={selectedDate} />
+                        <input type="hidden" name="employee" value={employeeFilter} />
+                        <input type="hidden" name="status_filter" value={statusFilter} />
+                        <label className="grid gap-1 text-sm font-bold text-slate-700">
+                          Check in
+                          <input
+                            name="check_in_at"
+                            type="text"
+                            defaultValue={timestampCorrectionValue(record.check_in_at, settings.timezone)}
+                            placeholder="YYYY-MM-DDTHH:mm:ss+05:00"
+                            className="min-h-11 rounded-lg border border-slate-300 px-3 font-mono text-sm"
+                          />
+                        </label>
+                        <label className="grid gap-1 text-sm font-bold text-slate-700">
+                          Check out
+                          <input
+                            name="check_out_at"
+                            type="text"
+                            defaultValue={timestampCorrectionValue(record.check_out_at, settings.timezone)}
+                            placeholder="YYYY-MM-DDTHH:mm:ss+05:00"
+                            className="min-h-11 rounded-lg border border-slate-300 px-3 font-mono text-sm"
+                          />
+                        </label>
+                        <label className="grid gap-1 text-sm font-bold text-slate-700">
+                          Status
+                          <select name="status" defaultValue={record.status} className="min-h-11 rounded-lg border border-slate-300 px-3">
+                            {attendanceCorrectionStatuses.map((status) => (
+                              <option key={status} value={status}>
+                                {status}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <label className="grid gap-1 text-sm font-bold text-slate-700">
+                          Total hours
+                          <input
+                            name="total_hours"
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            defaultValue={record.total_hours ?? ""}
+                            className="min-h-11 rounded-lg border border-slate-300 px-3"
+                          />
+                        </label>
+                        <label className="grid gap-1 text-sm font-bold text-slate-700 md:col-span-2 xl:col-span-4">
+                          Correction reason
+                          <input
+                            name="correction_reason"
+                            required
+                            className="min-h-11 rounded-lg border border-slate-300 px-3"
+                          />
+                        </label>
+                        <button className="min-h-11 self-end rounded-lg bg-bie-700 px-4 font-extrabold text-white">
+                          Save correction
+                        </button>
+                      </form>
+                    </details>
+                  ) : null}
                 </article>
               ))
             ) : (
@@ -334,4 +405,43 @@ function attendanceStatusPath(status: AttendanceFilter, employee: string, date: 
   if (dateWasProvided && date) params.set("date", date);
 
   return `/admin/attendance?${params.toString()}`;
+}
+
+function isSyntheticAbsentRecord(record: Pick<AttendanceRecord, "id">) {
+  return record.id.startsWith("synthetic-absent-");
+}
+
+function timestampCorrectionValue(value: string | null | undefined, timezone: string) {
+  if (!value) return "";
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: timezone || "Asia/Karachi",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+    timeZoneName: "longOffset"
+  }).formatToParts(date);
+  const part = (type: string) => parts.find((item) => item.type === type)?.value ?? "";
+  const offset = part("timeZoneName").replace("GMT", "") || "+00:00";
+
+  return `${part("year")}-${part("month")}-${part("day")}T${part("hour")}:${part("minute")}:${part("second")}${offset}`;
+}
+
+function AttendanceCorrectionMessage({ success, error }: { success?: string; error?: string }) {
+  if (success) {
+    return <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm font-semibold text-emerald-800">{success}</div>;
+  }
+
+  if (error) {
+    return <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm font-semibold text-red-700">{error}</div>;
+  }
+
+  return null;
 }
