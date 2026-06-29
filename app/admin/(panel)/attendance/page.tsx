@@ -301,23 +301,32 @@ export default async function AdminAttendancePage({ searchParams }: Props) {
                         <input type="hidden" name="employee" value={employeeFilter} />
                         <input type="hidden" name="status_filter" value={statusFilter} />
                         <label className="grid gap-1 text-sm font-bold text-slate-700">
-                          Check in
+                          Correction date
                           <input
-                            name="check_in_at"
-                            type="text"
-                            defaultValue={timestampCorrectionValue(record.check_in_at, settings.timezone)}
-                            placeholder="YYYY-MM-DDTHH:mm:ss+05:00"
-                            className="min-h-11 rounded-lg border border-slate-300 px-3 font-mono text-sm"
+                            name="correction_date"
+                            type="date"
+                            required
+                            defaultValue={record.work_date || selectedDate}
+                            max={today}
+                            className="min-h-11 rounded-lg border border-slate-300 px-3"
                           />
                         </label>
                         <label className="grid gap-1 text-sm font-bold text-slate-700">
-                          Check out
+                          Check in time
                           <input
-                            name="check_out_at"
-                            type="text"
-                            defaultValue={timestampCorrectionValue(record.check_out_at, settings.timezone)}
-                            placeholder="YYYY-MM-DDTHH:mm:ss+05:00"
-                            className="min-h-11 rounded-lg border border-slate-300 px-3 font-mono text-sm"
+                            name="check_in_time"
+                            type="time"
+                            defaultValue={formatTimeInputValue(record.check_in_at, settings.timezone)}
+                            className="min-h-11 rounded-lg border border-slate-300 px-3"
+                          />
+                        </label>
+                        <label className="grid gap-1 text-sm font-bold text-slate-700">
+                          Check out time
+                          <input
+                            name="check_out_time"
+                            type="time"
+                            defaultValue={formatTimeInputValue(record.check_out_at, settings.timezone)}
+                            className="min-h-11 rounded-lg border border-slate-300 px-3"
                           />
                         </label>
                         <label className="grid gap-1 text-sm font-bold text-slate-700">
@@ -411,27 +420,28 @@ function isSyntheticAbsentRecord(record: Pick<AttendanceRecord, "id">) {
   return record.id.startsWith("synthetic-absent-");
 }
 
-function timestampCorrectionValue(value: string | null | undefined, timezone: string) {
+function formatTimeInputValue(value: string | null | undefined, timezone: string) {
   if (!value) return "";
 
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
+  if (Number.isNaN(date.getTime())) return "";
 
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: timezone || "Asia/Karachi",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false,
-    timeZoneName: "longOffset"
-  }).formatToParts(date);
-  const part = (type: string) => parts.find((item) => item.type === type)?.value ?? "";
-  const offset = part("timeZoneName").replace("GMT", "") || "+00:00";
+  try {
+    const parts = new Intl.DateTimeFormat("en-GB", {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+      timeZone: timezone
+    }).formatToParts(date);
 
-  return `${part("year")}-${part("month")}-${part("day")}T${part("hour")}:${part("minute")}:${part("second")}${offset}`;
+    const hour = parts.find((part) => part.type === "hour")?.value ?? "";
+    const minute = parts.find((part) => part.type === "minute")?.value ?? "";
+    return hour && minute ? `${hour}:${minute}` : "";
+  } catch {
+    const hours = String(date.getHours()).padStart(2, "0");
+    const minutes = String(date.getMinutes()).padStart(2, "0");
+    return `${hours}:${minutes}`;
+  }
 }
 
 function AttendanceCorrectionMessage({ success, error }: { success?: string; error?: string }) {

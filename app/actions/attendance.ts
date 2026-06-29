@@ -11,6 +11,7 @@ import {
 import { requireAdminManagerProfile, requireProfile } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { getOrganizationSettings } from "@/lib/organization-settings";
 import type { Profile } from "@/lib/types";
 
 function attendanceRedirectPath(formData: FormData) {
@@ -83,6 +84,48 @@ function nullableFormString(formData: FormData, key: string) {
 function nullableFormNumber(formData: FormData, key: string) {
   const value = String(formData.get(key) ?? "").trim();
   return value ? Number(value) : null;
+}
+
+function buildTimestampFromDateAndTime(date: string, time: string | null, timezone: string) {
+  const trimmedDate = String(date || "").trim();
+  const trimmedTime = String(time || "").trim();
+
+  if (!trimmedDate || !trimmedTime) {
+    return null;
+  }
+
+  const dateMatch = /^\d{4}-\d{2}-\d{2}$/.test(trimmedDate);
+  const timeMatch = /^([01]\d|2[0-3]):([0-5]\d)$/.test(trimmedTime);
+
+  if (!dateMatch || !timeMatch) {
+    throw new Error("Correction date or time is invalid.");
+  }
+
+  const offset = timezoneOffsetString(trimmedDate, timezone);
+  return `${trimmedDate}T${trimmedTime}:00${offset}`;
+}
+
+function timezoneOffsetString(dateValue: string, timezone: string) {
+  const date = new Date(`${dateValue}T12:00:00Z`);
+
+  try {
+    const parts = new Intl.DateTimeFormat("en-CA", {
+      timeZone: timezone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: false,
+      timeZoneName: "longOffset"
+    }).formatToParts(date);
+
+    const zone = parts.find((part) => part.type === "timeZoneName")?.value ?? "";
+    return zone.replace("GMT", "") || "+00:00";
+  } catch {
+    return "+00:00";
+  }
 }
 
 async function logUnauthorizedAttendance(profile: Profile, reason: string | undefined, message: string | undefined) {
@@ -166,15 +209,21 @@ export async function checkOut(formData: FormData) {
 export async function correctAttendance(formData: FormData) {
   await requireAdminManagerProfile();
   const returnPath = adminAttendancePath(formData);
-  const supabase = await createClient();
+  const supabase = createAdminClient();
+  const settings = await getOrganizationSettings();
   const id = String(formData.get("id") || "");
-  const checkInAt = nullableFormString(formData, "check_in_at");
-  const checkOutAt = nullableFormString(formData, "check_out_at");
+  const correctionDate = String(formData.get("correction_date") || "").trim();
+  const checkInTime = nullableFormString(formData, "check_in_time");
+  const checkOutTime = nullableFormString(formData, "check_out_time");
   const totalHours = nullableFormNumber(formData, "total_hours");
   const correctionReason = String(formData.get("correction_reason") || "").trim();
 
   if (!correctionReason) {
     redirectWithAttendanceCorrectionMessage(returnPath, "error", "Correction reason is required.");
+  }
+
+  if (!correctionDate) {
+    redirectWithAttendanceCorrectionMessage(returnPath, "error", "Correction date is required.");
   }
 
   if (!id || id.startsWith("synthetic-absent-")) {
@@ -183,7 +232,7 @@ export async function correctAttendance(formData: FormData) {
 
   const { data: existingAttendance, error: fetchError } = await supabase
     .from("attendance")
-    .select("id, check_in_at, check_out_at, status, total_hours")
+    .select("id, work_date, check_in_at, check_out_at, status, total_hours")
     .eq("id", id)
     .maybeSingle();
 
@@ -193,15 +242,24 @@ export async function correctAttendance(formData: FormData) {
 
   const status = String(formData.get("status") || existingAttendance.status || "Present");
 
+  const checkInAt = buildTimestampFromDateAndTime(correctionDate, checkInTime, settings.timezone);
+  const checkOutAt = buildTimestampFromDateAndTime(correctionDate, checkOutTime, settings.timezone);
+
+  const updates: Record<string, unknown> = {
+    check_in_at: checkInAt,
+    check_out_at: checkOutAt,
+    status,
+    total_hours: totalHours,
+    updated_at: new Date().toISOString()
+  };
+
+  if (correctionDate && existingAttendance.work_date && existingAttendance.work_date !== correctionDate) {
+    updates.work_date = correctionDate;
+  }
+
   const { data: updatedAttendance, error } = await supabase
     .from("attendance")
-    .update({
-      check_in_at: checkInAt,
-      check_out_at: checkOutAt,
-      status,
-      total_hours: totalHours,
-      updated_at: new Date().toISOString()
-    })
+    .update(updates)
     .eq("id", id)
     .select("id")
     .maybeSingle();
@@ -210,7 +268,7 @@ export async function correctAttendance(formData: FormData) {
     redirectWithAttendanceCorrectionMessage(returnPath, "error", "Attendance correction could not be saved.");
   }
 
-  await logAudit("attendance_corrected", "attendance", id, {
+  const auditDetails: Record<string, unknown> = {
     old_check_in_at: existingAttendance.check_in_at,
     old_check_out_at: existingAttendance.check_out_at,
     old_status: existingAttendance.status,
@@ -220,7 +278,14 @@ export async function correctAttendance(formData: FormData) {
     new_status: status,
     new_total_hours: totalHours,
     correction_reason: correctionReason
-  });
+  };
+
+  if (existingAttendance.work_date && correctionDate && existingAttendance.work_date !== correctionDate) {
+    auditDetails.old_work_date = existingAttendance.work_date;
+    auditDetails.new_work_date = correctionDate;
+  }
+
+  await logAudit("attendance_corrected", "attendance", id, auditDetails);
   revalidatePath("/admin/attendance");
   redirectWithAttendanceCorrectionMessage(adminAttendancePath(formData, "All"), "success", "Attendance correction saved.");
 }
