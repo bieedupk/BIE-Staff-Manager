@@ -36,7 +36,7 @@ function adminAttendancePath(formData: FormData, statusOverride?: string) {
   return params.size ? `/admin/attendance?${params.toString()}` : "/admin/attendance";
 }
 
-function redirectWithAttendanceCorrectionMessage(path: string, type: "success" | "error", message: string) {
+function redirectWithAttendanceCorrectionMessage(path: string, type: "success" | "error", message: string): never {
   const separator = path.includes("?") ? "&" : "?";
   redirect(`${path}${separator}attendance_correction_${type}=${encodeURIComponent(message)}`);
 }
@@ -73,6 +73,16 @@ function revalidateAttendancePages() {
   revalidatePath("/employee/dashboard");
   revalidatePath("/employee/attendance");
   revalidatePath("/admin/attendance");
+}
+
+function nullableFormString(formData: FormData, key: string) {
+  const value = String(formData.get(key) ?? "").trim();
+  return value || null;
+}
+
+function nullableFormNumber(formData: FormData, key: string) {
+  const value = String(formData.get(key) ?? "").trim();
+  return value ? Number(value) : null;
 }
 
 async function logUnauthorizedAttendance(profile: Profile, reason: string | undefined, message: string | undefined) {
@@ -157,29 +167,58 @@ export async function correctAttendance(formData: FormData) {
   await requireAdminManagerProfile();
   const returnPath = adminAttendancePath(formData);
   const supabase = await createClient();
-  const id = String(formData.get("id"));
-  const totalHoursValue = String(formData.get("total_hours") || "");
+  const id = String(formData.get("id") || "");
+  const checkInAt = nullableFormString(formData, "check_in_at");
+  const checkOutAt = nullableFormString(formData, "check_out_at");
+  const totalHours = nullableFormNumber(formData, "total_hours");
   const correctionReason = String(formData.get("correction_reason") || "").trim();
 
   if (!correctionReason) {
     redirectWithAttendanceCorrectionMessage(returnPath, "error", "Correction reason is required.");
   }
 
-  const { error } = await supabase
+  if (!id || id.startsWith("synthetic-absent-")) {
+    redirectWithAttendanceCorrectionMessage(returnPath, "error", "Synthetic absent rows cannot be corrected.");
+  }
+
+  const { data: existingAttendance, error: fetchError } = await supabase
+    .from("attendance")
+    .select("id, check_in_at, check_out_at, status, total_hours")
+    .eq("id", id)
+    .maybeSingle();
+
+  if (fetchError || !existingAttendance) {
+    redirectWithAttendanceCorrectionMessage(returnPath, "error", "Attendance record does not exist.");
+  }
+
+  const status = String(formData.get("status") || existingAttendance.status || "Present");
+
+  const { data: updatedAttendance, error } = await supabase
     .from("attendance")
     .update({
-      status: String(formData.get("status") || "Present"),
-      total_hours: totalHoursValue ? Number(totalHoursValue) : null
+      check_in_at: checkInAt,
+      check_out_at: checkOutAt,
+      status,
+      total_hours: totalHours,
+      updated_at: new Date().toISOString()
     })
-    .eq("id", id);
+    .eq("id", id)
+    .select("id")
+    .maybeSingle();
 
-  if (error) {
+  if (error || !updatedAttendance) {
     redirectWithAttendanceCorrectionMessage(returnPath, "error", "Attendance correction could not be saved.");
   }
 
   await logAudit("attendance_corrected", "attendance", id, {
-    status: formData.get("status"),
-    total_hours: totalHoursValue || null,
+    old_check_in_at: existingAttendance.check_in_at,
+    old_check_out_at: existingAttendance.check_out_at,
+    old_status: existingAttendance.status,
+    old_total_hours: existingAttendance.total_hours,
+    new_check_in_at: checkInAt,
+    new_check_out_at: checkOutAt,
+    new_status: status,
+    new_total_hours: totalHours,
     correction_reason: correctionReason
   });
   revalidatePath("/admin/attendance");
