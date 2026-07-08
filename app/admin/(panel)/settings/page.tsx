@@ -88,6 +88,21 @@ export default async function AdminSettingsPage({
         <p className="mt-1 text-sm font-medium text-slate-500">
           Welcome email content sent after an admin creates a staff account.
         </p>
+        <div className="mt-3 rounded-md border border-slate-200 bg-slate-50 p-3 text-sm">
+          <strong className="block mb-1">Available placeholders</strong>
+          <ul className="list-disc ml-5 space-y-1">
+            <li>{"{{employee_name}}"}</li>
+            <li>{"{{designation}}"}</li>
+            <li>{"{{departments}}"}</li>
+            <li>{"{{email}}"}</li>
+            <li>{"{{setup_link}}"}</li>
+            <li>{"{{contact_email}}"}</li>
+            <li>{"{{contact_phone}}"}</li>
+            <li>{"{{contact_address}}"}</li>
+            <li>{"{{organization_name}}"}</li>
+          </ul>
+          <p className="mt-2 text-xs text-slate-600">Use the secure setup link (<em>{"{{setup_link}}"}</em>) instead of sending passwords in plain text.</p>
+        </div>
         {canUpdateOfficeTiming ? (
           <form action={updateWelcomeEmailTemplate} className="mt-4 grid gap-3">
             <label className="grid gap-1 text-sm font-bold text-slate-700">
