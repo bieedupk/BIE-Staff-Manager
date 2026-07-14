@@ -30,6 +30,8 @@ export type Profile = {
   supervisor_id: string | null;
   joining_date: string | null;
   status: EmployeeStatus;
+  employee_type: string | null;
+  responsibilities: string | null;
   created_at: string;
 };
 
