@@ -1,4 +1,17 @@
 import Link from "next/link";
+import {
+  UserCheck,
+  UsersRound,
+  UserX,
+  Clock,
+  Timer,
+  ClipboardCheck,
+  ClipboardX,
+  ListTodo,
+  CalendarClock,
+  CalendarX,
+  type LucideIcon
+} from "lucide-react";
 import { LiveClock } from "@/components/layout/live-clock";
 import { StatCard } from "@/components/ui/stat-card";
 import { deriveAttendanceFlags } from "@/lib/attendance";
@@ -69,30 +82,38 @@ export default async function AdminDashboardPage() {
         </div>
       </section>
       <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-        <StatCard label="Active employees" value={activeEmployeeCount} href="/admin/employees" />
-        <StatCard label="Total staff records" value={staffRecords.length} href="/admin/employees" />
-        <StatCard label={t("presentToday", locale)} value={presentToday} href="/admin/attendance?status=present" />
-        <StatCard label={t("absentToday", locale)} value={absentToday} href="/admin/attendance?status=absent" />
-        <StatCard label={t("lateToday", locale)} value={lateToday} href="/admin/attendance?status=late" />
-        <StatCard label="Half-day today" value={halfDayToday} href="/admin/attendance?status=half-day" />
-        <StatCard label="Reports submitted today" value={reportEmployees.size} hint={formatDate(today)} href="/admin/daily-reports" />
-        <StatCard label="Reports missing today" value={missingReports} href="/admin/daily-reports" />
-        <StatCard label={t("pendingTasks", locale)} value={pendingTasks.count ?? 0} href="/admin/tasks" />
-        <StatCard label={t("pendingLeaves", locale)} value={pendingLeaves.count ?? 0} href="/admin/leaves" />
+        <StatCard label="Active employees" value={activeEmployeeCount} href="/admin/employees" icon={UserCheck} />
+        <StatCard label="Total staff records" value={staffRecords.length} href="/admin/employees" icon={UsersRound} />
+        <StatCard label={t("presentToday", locale)} value={presentToday} href="/admin/attendance?status=present" icon={UserCheck} />
+        <StatCard label={t("absentToday", locale)} value={absentToday} href="/admin/attendance?status=absent" icon={UserX} />
+        <StatCard label={t("lateToday", locale)} value={lateToday} href="/admin/attendance?status=late" icon={Clock} />
+        <StatCard label="Half-day today" value={halfDayToday} href="/admin/attendance?status=half-day" icon={Timer} />
+        <StatCard label="Reports submitted today" value={reportEmployees.size} hint={formatDate(today)} href="/admin/daily-reports" icon={ClipboardCheck} />
+        <StatCard label="Reports missing today" value={missingReports} href="/admin/daily-reports" icon={ClipboardX} />
+        <StatCard label={t("pendingTasks", locale)} value={pendingTasks.count ?? 0} href="/admin/tasks" icon={ListTodo} />
+        <StatCard label={t("pendingLeaves", locale)} value={pendingLeaves.count ?? 0} href="/admin/leaves" icon={CalendarClock} />
       </section>
 
       <section className="mt-6 rounded-lg border border-emerald-100 bg-white p-4 shadow-soft">
-        <div>
-          <h2 className="font-extrabold text-slate-950">Today&apos;s Action Required</h2>
-          <p className="mt-1 text-sm font-medium text-slate-500">Daily checks that need a manager&apos;s attention.</p>
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="font-extrabold text-slate-950">Today&apos;s Action Required</h2>
+            <p className="mt-1 text-sm font-medium text-slate-500">Daily checks that need a manager&apos;s attention.</p>
+          </div>
+          <Link
+            href="/admin/attendance"
+            className="shrink-0 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-bold text-bie-700 transition hover:bg-emerald-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bie-700 focus-visible:ring-offset-2"
+          >
+            View Attendance
+          </Link>
         </div>
-        <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
-          <ActionCount label="Absent employees" value={absentToday} href="/admin/attendance?status=absent" />
-          <ActionCount label="Late employees" value={lateToday} href="/admin/attendance?status=late" />
-          <ActionCount label="Half-day employees" value={halfDayToday} href="/admin/attendance?status=half-day" />
-          <ActionCount label="Missing daily reports" value={missingReports} href="/admin/daily-reports" />
-          <ActionCount label="Pending leave requests" value={pendingLeaves.count ?? 0} href="/admin/leaves" />
-          <ActionCount label="Overdue tasks" value={overdueTasks.count ?? 0} href="/admin/tasks" />
+        <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+          <ActionCount label="Absent employees" value={absentToday} href="/admin/attendance?status=absent" icon={UserX} />
+          <ActionCount label="Late employees" value={lateToday} href="/admin/attendance?status=late" icon={Clock} />
+          <ActionCount label="Half-day employees" value={halfDayToday} href="/admin/attendance?status=half-day" icon={Timer} />
+          <ActionCount label="Missing daily reports" value={missingReports} href="/admin/daily-reports" icon={ClipboardX} />
+          <ActionCount label="Pending leave requests" value={pendingLeaves.count ?? 0} href="/admin/leaves" icon={CalendarClock} />
+          <ActionCount label="Overdue tasks" value={overdueTasks.count ?? 0} href="/admin/tasks" icon={CalendarX} />
         </div>
       </section>
 
@@ -100,14 +121,22 @@ export default async function AdminDashboardPage() {
   );
 }
 
-function ActionCount({ label, value, href }: { label: string; value: number; href: string }) {
+function ActionCount({ label, value, href, icon: Icon }: { label: string; value: number; href: string; icon: LucideIcon }) {
   return (
     <Link
       href={href}
-      className="flex min-h-20 items-center justify-between gap-3 rounded-lg border border-emerald-100 bg-emerald-50 p-3 transition hover:border-emerald-200 hover:bg-emerald-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bie-700 focus-visible:ring-offset-2"
+      className="relative flex min-h-20 items-center justify-between gap-3 overflow-hidden rounded-lg border border-emerald-100 bg-emerald-50 p-4 transition hover:border-emerald-200 hover:bg-emerald-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bie-700 focus-visible:ring-offset-2"
     >
-      <span className="text-sm font-bold text-slate-700">{label}</span>
-      <span className="text-2xl font-extrabold text-bie-700">{value}</span>
+      <Icon
+        className="absolute right-3 top-1/2 -translate-y-1/2 text-emerald-200"
+        size={56}
+        strokeWidth={1.25}
+        aria-hidden="true"
+      />
+      <div className="relative">
+        <p className="text-sm font-bold text-slate-700">{label}</p>
+        <p className="mt-1 text-2xl font-extrabold text-bie-700">{value}</p>
+      </div>
     </Link>
   );
 }
