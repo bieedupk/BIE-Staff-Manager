@@ -36,6 +36,7 @@ export async function sendEmail(input: SendEmailInput): Promise<SendEmailResult>
 
   try {
     const resend = new Resend(apiKey);
+
     const { data, error } = await resend.emails.send({
       from,
       to: input.to,
