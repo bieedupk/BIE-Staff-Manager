@@ -1,5 +1,5 @@
 import { createEmployee, sendManualEmployeeWelcomeEmail, setEmployeeStatus, updateEmployee } from "@/app/actions/admin";
-import { DepartmentAssignmentFields } from "@/components/admin/department-assignment-fields";
+
 import { disableAuthorizedDevice, registerAuthorizedDevice, resetAuthorizedDevice } from "@/app/actions/devices";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
@@ -12,6 +12,9 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import type { AuthorizedDevice, Department, EmailLogStatus, Profile } from "@/lib/types";
 import { formatDate, formatDateTime, isAdminManagerRole, roleLabel } from "@/lib/utils";
+
+import { EmployeeAssignmentFields } from "@/components/admin/employee-assignment-fields";
+import { EMPLOYEE_TYPES } from "@/lib/employee-options";
 
 const roles = ["employee", "supervisor", "admin", "super_admin"];
 const statuses = ["active", "disabled"];
@@ -122,8 +125,7 @@ export default async function AdminEmployeesPage({
           <Input name="email" label="Email" type="email" required />
           <Input name="password" label="Temporary password" type="password" required minLength={6} />
           <Input name="phone" label="Phone" />
-          <Input name="designation" label="Designation" />
-          <Input name="employee_type" label="Employee Type" />
+          <Select name="employee_type" label="Employee Type" options={["", ...EMPLOYEE_TYPES]} />
           <Textarea
             name="responsibilities"
             label="Responsibilities"
@@ -139,7 +141,7 @@ export default async function AdminEmployeesPage({
           <Input name="joining_date" label="Joining date" type="date" />
           <Select name="role" label="Role" options={roles} />
           <Select name="status" label="Status" options={statuses} />
-          <DepartmentAssignmentFields departments={activeDepartments} selectedDepartmentIds={defaultDepartmentId ? [defaultDepartmentId] : []} />
+          <EmployeeAssignmentFields departments={activeDepartments} selectedDepartmentIds={defaultDepartmentId ? [defaultDepartmentId] : []} />
           <label className="grid gap-1 text-sm font-bold text-slate-700">
             Supervisor
             <select name="supervisor_id" className="min-h-11 rounded-lg border border-slate-300 px-3">
@@ -229,8 +231,7 @@ export default async function AdminEmployeesPage({
                   <input type="hidden" name="id" value={employee.id} />
                   <Input name="full_name" label="Full name" defaultValue={employee.full_name} required />
                   <Input name="phone" label="Phone" defaultValue={employee.phone ?? ""} />
-                  <Input name="designation" label="Designation" defaultValue={employee.designation ?? ""} />
-                  <Input name="employee_type" label="Employee Type" defaultValue={employee.employee_type ?? ""} />
+                  <Select name="employee_type" label="Employee Type" options={["", ...EMPLOYEE_TYPES]} defaultValue={employee.employee_type ?? ""} />
                   <Textarea
                     name="responsibilities"
                     label="Responsibilities"
@@ -240,10 +241,11 @@ export default async function AdminEmployeesPage({
                   <Input name="joining_date" label="Joining date" type="date" defaultValue={employee.joining_date ?? ""} />
                   <Select name="role" label="Role" options={roles} defaultValue={employee.role} />
                   <Select name="status" label="Status" options={statuses} defaultValue={employee.status} />
-                  <DepartmentAssignmentFields
+                  <EmployeeAssignmentFields
                     departments={activeDepartments}
                     selectedDepartmentIds={selectedDepartmentIds(employee, activeDepartments, assignmentsByEmployee)}
                     otherDepartment={selectedOtherDepartment(employee, assignmentsByEmployee)}
+                    defaultDesignation={employee.designation ?? ""}
                   />
                   <label className="grid gap-1 text-sm font-bold text-slate-700">
                     Supervisor
