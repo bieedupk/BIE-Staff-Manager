@@ -138,7 +138,11 @@ async function logEmailAttempt(
   try {
     await createAdminClient().from("email_logs").insert({
       employee_id: input.employeeId,
-      recipient_email: input.email,
+      // Record the actual delivery recipient. If a test override is configured,
+      // it will be used for delivery; this log field should reflect that actual recipient.
+      recipient_email: (typeof process.env.WELCOME_EMAIL_TEST_RECIPIENT === "string" && process.env.WELCOME_EMAIL_TEST_RECIPIENT.trim())
+        ? process.env.WELCOME_EMAIL_TEST_RECIPIENT.trim()
+        : input.email,
       template_key: template.template_key,
       subject,
       status,
