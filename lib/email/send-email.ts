@@ -37,16 +37,9 @@ export async function sendEmail(input: SendEmailInput): Promise<SendEmailResult>
   try {
     const resend = new Resend(apiKey);
 
-    // Delivery override for local testing: when WELCOME_EMAIL_TEST_RECIPIENT is set,
-    // deliver to that address instead of the employee's email. The application
-    // still records the employee's real email in Auth/profile and uses it for AI
-    // personalization; this only affects the actual delivery target.
-    const testRecipient = typeof process.env.WELCOME_EMAIL_TEST_RECIPIENT === "string" ? process.env.WELCOME_EMAIL_TEST_RECIPIENT.trim() : "";
-    const deliveryTo = testRecipient || input.to;
-
     const { data, error } = await resend.emails.send({
       from,
-      to: deliveryTo,
+      to: input.to,
       subject: input.subject,
       text: input.text,
       html: input.html

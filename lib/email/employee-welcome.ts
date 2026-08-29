@@ -26,13 +26,19 @@ type EmailResult = {
 };
 
 export async function sendEmployeeWelcomeEmail(input: WelcomeEmailInput): Promise<EmailResult> {
+  // Resolve delivery recipient for welcome emails only. When `WELCOME_EMAIL_TEST_RECIPIENT`
+  // is set locally, delivery will go to that address while AI personalization and stored
+  // employee data remain unchanged.
+  const configuredTestRecipient = typeof process.env.WELCOME_EMAIL_TEST_RECIPIENT === "string" ? process.env.WELCOME_EMAIL_TEST_RECIPIENT.trim() : "";
+  const deliveryRecipient = configuredTestRecipient || input.email;
+
   const template = await getWelcomeEmailTemplate();
   const organizationSettings = await getOrganizationSettings();
   const setupLink = await createSetupLink(input.email);
 
   if (!setupLink) {
     const failedMessage = "A secure setup link could not be generated for the welcome email.";
-    await logEmailAttempt(input, template, "Secure setup link unavailable", "failed", failedMessage, null, {
+    await logEmailAttempt(input, deliveryRecipient, template, "Secure setup link unavailable", "failed", failedMessage, null, {
       setup_link_generated: false,
       ai_generation_failed: true,
       reason: "missing_setup_link"
@@ -55,7 +61,7 @@ export async function sendEmployeeWelcomeEmail(input: WelcomeEmailInput): Promis
   const aiResult = await generateAiWelcomeEmail(aiInput);
 
   if (!aiResult.ok) {
-    await logEmailAttempt(input, template, "AI welcome email generation failed", "failed", aiResult.message, null, {
+    await logEmailAttempt(input, deliveryRecipient, template, "AI welcome email generation failed", "failed", aiResult.message, null, {
       setup_link_generated: true,
       ai_generation_failed: true,
       ai_generation_reason: aiResult.reason,
@@ -71,7 +77,7 @@ export async function sendEmployeeWelcomeEmail(input: WelcomeEmailInput): Promis
   const plainText = renderWelcomeEmailText(aiResult.content, setupLink, organizationSettings?.organization_name || "Organization");
 
   const result = await sendEmail({
-    to: input.email,
+    to: deliveryRecipient,
     subject: aiResult.content.subject,
     text: plainText,
     html
@@ -79,6 +85,7 @@ export async function sendEmployeeWelcomeEmail(input: WelcomeEmailInput): Promis
 
   await logEmailAttempt(
     input,
+    deliveryRecipient,
     template,
     aiResult.content.subject,
     result.status,
@@ -128,6 +135,7 @@ async function createSetupLink(email: string) {
 
 async function logEmailAttempt(
   input: WelcomeEmailInput,
+  recipientEmail: string,
   template: EmailTemplate,
   subject: string,
   status: EmailLogStatus,
@@ -138,11 +146,7 @@ async function logEmailAttempt(
   try {
     await createAdminClient().from("email_logs").insert({
       employee_id: input.employeeId,
-      // Record the actual delivery recipient. If a test override is configured,
-      // it will be used for delivery; this log field should reflect that actual recipient.
-      recipient_email: (typeof process.env.WELCOME_EMAIL_TEST_RECIPIENT === "string" && process.env.WELCOME_EMAIL_TEST_RECIPIENT.trim())
-        ? process.env.WELCOME_EMAIL_TEST_RECIPIENT.trim()
-        : input.email,
+      recipient_email: recipientEmail,
       template_key: template.template_key,
       subject,
       status,
