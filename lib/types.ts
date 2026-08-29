@@ -1,5 +1,7 @@
 export type UserRole = "super_admin" | "admin" | "supervisor" | "employee";
 export type EmployeeStatus = "active" | "disabled";
+export type WelcomeEmailMode = "automatic" | "manual";
+export type WelcomeEmailStatus = "pending" | "sending" | "sent" | "failed" | "skipped";
 export type AttendanceStatus = "Present" | "Absent" | "Late" | "Half Day";
 export type LeaveStatus = "Pending" | "Approved" | "Rejected";
 export type TaskStatus = "Pending" | "In Progress" | "Completed" | "Overdue";
@@ -30,6 +32,8 @@ export type Profile = {
   supervisor_id: string | null;
   joining_date: string | null;
   status: EmployeeStatus;
+  welcome_email_mode: WelcomeEmailMode;
+  welcome_email_status: WelcomeEmailStatus;
   employee_type: string | null;
   responsibilities: string | null;
   created_at: string;

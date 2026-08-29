@@ -1,4 +1,4 @@
-import { createEmployee, setEmployeeStatus, updateEmployee } from "@/app/actions/admin";
+import { createEmployee, sendManualEmployeeWelcomeEmail, setEmployeeStatus, updateEmployee } from "@/app/actions/admin";
 import { DepartmentAssignmentFields } from "@/components/admin/department-assignment-fields";
 import { disableAuthorizedDevice, registerAuthorizedDevice, resetAuthorizedDevice } from "@/app/actions/devices";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -123,6 +123,19 @@ export default async function AdminEmployeesPage({
           <Input name="password" label="Temporary password" type="password" required minLength={6} />
           <Input name="phone" label="Phone" />
           <Input name="designation" label="Designation" />
+          <Input name="employee_type" label="Employee Type" />
+          <Textarea
+            name="responsibilities"
+            label="Responsibilities"
+            placeholder="Describe the employee's main responsibilities and duties"
+          />
+          <label className="grid gap-1 text-sm font-bold text-slate-700">
+            Welcome email
+            <select name="welcome_email_mode" defaultValue="automatic" className="min-h-11 rounded-lg border border-slate-300 px-3">
+              <option value="automatic">Send automatically</option>
+              <option value="manual">Send manually later</option>
+            </select>
+          </label>
           <Input name="joining_date" label="Joining date" type="date" />
           <Select name="role" label="Role" options={roles} />
           <Select name="status" label="Status" options={statuses} />
@@ -178,20 +191,32 @@ export default async function AdminEmployeesPage({
                   <div className="mt-2 flex flex-wrap gap-2">
                     <StatusBadge>{roleLabel(employee.role)}</StatusBadge>
                     <StatusBadge tone="employee">{roleLabel(employee.status)}</StatusBadge>
-                    {canManageEmployees ? <WelcomeEmailStatus log={latestWelcomeEmailByEmployee.get(employee.id)} /> : null}
+                    {canManageEmployees ? (
+                      <WelcomeEmailStatus employee={employee} log={latestWelcomeEmailByEmployee.get(employee.id)} />
+                    ) : null}
                     {departmentNamesForProfile(employee, assignmentsByEmployee).map((departmentName) => (
                       <StatusBadge key={departmentName}>{departmentName}</StatusBadge>
                     ))}
                   </div>
                 </div>
                 {canManageEmployees ? (
-                  <form action={setEmployeeStatus}>
-                    <input type="hidden" name="id" value={employee.id} />
-                    <input type="hidden" name="status" value={employee.status === "active" ? "disabled" : "active"} />
-                    <button className="rounded-lg border border-red-200 px-3 py-2 text-sm font-bold text-red-700">
-                      {employee.status === "active" ? "Disable" : "Enable"}
-                    </button>
-                  </form>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {employee.welcome_email_mode === "manual" && ["pending", "failed", "skipped"].includes(employee.welcome_email_status) ? (
+                      <form action={sendManualEmployeeWelcomeEmail}>
+                        <input type="hidden" name="id" value={employee.id} />
+                        <button className="rounded-lg bg-bie-700 px-3 py-2 text-sm font-extrabold text-white">
+                          Send Welcome Email
+                        </button>
+                      </form>
+                    ) : null}
+                    <form action={setEmployeeStatus}>
+                      <input type="hidden" name="id" value={employee.id} />
+                      <input type="hidden" name="status" value={employee.status === "active" ? "disabled" : "active"} />
+                      <button className="rounded-lg border border-red-200 px-3 py-2 text-sm font-bold text-red-700">
+                        {employee.status === "active" ? "Disable" : "Enable"}
+                      </button>
+                    </form>
+                  </div>
                 ) : null}
               </div>
               {canManageEmployees && employee.role === "employee" ? (
@@ -205,6 +230,13 @@ export default async function AdminEmployeesPage({
                   <Input name="full_name" label="Full name" defaultValue={employee.full_name} required />
                   <Input name="phone" label="Phone" defaultValue={employee.phone ?? ""} />
                   <Input name="designation" label="Designation" defaultValue={employee.designation ?? ""} />
+                  <Input name="employee_type" label="Employee Type" defaultValue={employee.employee_type ?? ""} />
+                  <Textarea
+                    name="responsibilities"
+                    label="Responsibilities"
+                    defaultValue={employee.responsibilities ?? ""}
+                    placeholder="Describe the employee's main responsibilities and duties"
+                  />
                   <Input name="joining_date" label="Joining date" type="date" defaultValue={employee.joining_date ?? ""} />
                   <Select name="role" label="Role" options={roles} defaultValue={employee.role} />
                   <Select name="status" label="Status" options={statuses} defaultValue={employee.status} />
@@ -287,9 +319,11 @@ function latestWelcomeEmailLogs(logs: WelcomeEmailLog[]) {
   return latestLogs;
 }
 
-function WelcomeEmailStatus({ log }: { log?: WelcomeEmailLog }) {
-  const label = log ? welcomeEmailStatusLabel(log.status) : "Not sent";
-  const className = log ? welcomeEmailStatusClass(log.status) : "bg-slate-50 text-slate-700 ring-slate-200";
+function WelcomeEmailStatus({ employee, log }: { employee?: Pick<Profile, "welcome_email_mode" | "welcome_email_status">; log?: WelcomeEmailLog }) {
+  const profileStatus = employee?.welcome_email_status;
+  const status = profileStatus ?? (log ? log.status : "pending");
+  const label = welcomeEmailStatusLabel(status);
+  const className = welcomeEmailStatusClass(status);
 
   return (
     <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-bold ring-1 ${className}`}>
@@ -298,16 +332,20 @@ function WelcomeEmailStatus({ log }: { log?: WelcomeEmailLog }) {
   );
 }
 
-function welcomeEmailStatusLabel(status: EmailLogStatus) {
+function welcomeEmailStatusLabel(status: EmailLogStatus | "pending" | "sending") {
   if (status === "sent") return "Sent";
   if (status === "failed") return "Failed";
-  return "Skipped";
+  if (status === "skipped") return "Skipped";
+  if (status === "sending") return "Sending";
+  return "Pending";
 }
 
-function welcomeEmailStatusClass(status: EmailLogStatus) {
+function welcomeEmailStatusClass(status: EmailLogStatus | "pending" | "sending") {
   if (status === "sent") return "bg-emerald-50 text-emerald-700 ring-emerald-200";
   if (status === "failed") return "bg-red-50 text-red-700 ring-red-200";
-  return "bg-amber-50 text-amber-700 ring-amber-200";
+  if (status === "skipped") return "bg-amber-50 text-amber-700 ring-amber-200";
+  if (status === "sending") return "bg-amber-50 text-amber-700 ring-amber-200";
+  return "bg-slate-50 text-slate-700 ring-slate-200";
 }
 
 function AuthorizedDevicePanel({ devices, employeeId }: { devices: AuthorizedDevice[]; employeeId: string }) {
@@ -364,6 +402,20 @@ function Input(props: React.InputHTMLAttributes<HTMLInputElement> & { label: str
     <label className="grid gap-1 text-sm font-bold text-slate-700">
       {label}
       <input {...inputProps} className="min-h-11 rounded-lg border border-slate-300 px-3" />
+    </label>
+  );
+}
+
+function Textarea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement> & { label: string; name: string }) {
+  const { label, ...textareaProps } = props;
+
+  return (
+    <label className="grid gap-1 text-sm font-bold text-slate-700 md:col-span-2 xl:col-span-2">
+      {label}
+      <textarea
+        {...textareaProps}
+        className="min-h-11 rounded-lg border border-slate-300 px-3 py-2"
+      />
     </label>
   );
 }

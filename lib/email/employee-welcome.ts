@@ -1,8 +1,10 @@
 import "server-only";
 
 import { departmentDisplayName } from "@/lib/department-utils";
+import { generateAiWelcomeEmail, renderWelcomeEmailHtml, renderWelcomeEmailText } from "@/lib/email/ai-welcome";
 import { sendEmail } from "@/lib/email/send-email";
-import { getWelcomeEmailTemplate, organizationName, renderTemplate } from "@/lib/email/templates";
+import { getWelcomeEmailTemplate } from "@/lib/email/templates";
+import { getOrganizationSettings } from "@/lib/organization-settings";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Department, EmailLogStatus, EmailTemplate } from "@/lib/types";
 
@@ -11,6 +13,8 @@ type WelcomeEmailInput = {
   employeeName: string;
   email: string;
   designation: string | null;
+  employeeType?: string | null;
+  responsibilities?: string | null;
   departments: Department[];
   otherDepartmentText: string | null;
 };
@@ -23,46 +27,68 @@ type EmailResult = {
 
 export async function sendEmployeeWelcomeEmail(input: WelcomeEmailInput): Promise<EmailResult> {
   const template = await getWelcomeEmailTemplate();
+  const organizationSettings = await getOrganizationSettings();
   const setupLink = await createSetupLink(input.email);
-  const replacements = {
-    organization_name: organizationName,
-    employee_name: input.employeeName,
-    designation: input.designation || "-",
-    departments: departmentNames(input.departments, input.otherDepartmentText).join(", ") || "-",
-    email: input.email,
-    setup_link: setupLink ?? "Please use Forgot Password to set your password.",
-    contact_email: template.contact_email || "-",
-    contact_phone: template.contact_phone || "-",
-    contact_address: template.contact_address || "-"
-  };
-  const subject = renderTemplate(template.subject, replacements);
-  const text = renderTemplate(template.body_text, replacements);
-  const html = template.body_html ? renderTemplate(template.body_html, replacements) : undefined;
 
-  if (!template.is_active) {
-    await logEmailAttempt(input, template, subject, "skipped", "Template is inactive.", null, {
-      setup_link_generated: Boolean(setupLink)
+  if (!setupLink) {
+    const failedMessage = "A secure setup link could not be generated for the welcome email.";
+    await logEmailAttempt(input, template, "Secure setup link unavailable", "failed", failedMessage, null, {
+      setup_link_generated: false,
+      ai_generation_failed: true,
+      reason: "missing_setup_link"
     });
-    return { status: "skipped", message: "Welcome email template is inactive." };
+    return { status: "failed", message: failedMessage };
   }
+
+  const aiInput = {
+    employeeName: input.employeeName,
+    designation: input.designation ?? null,
+    employeeType: input.employeeType ?? null,
+    responsibilities: input.responsibilities ?? null,
+    departments: departmentNames(input.departments, input.otherDepartmentText),
+    organizationName: organizationSettings?.organization_name || "Organization",
+    contactEmail: template.contact_email ?? null,
+    contactPhone: template.contact_phone ?? null,
+    contactAddress: template.contact_address ?? null
+  };
+
+  const aiResult = await generateAiWelcomeEmail(aiInput);
+
+  if (!aiResult.ok) {
+    await logEmailAttempt(input, template, "AI welcome email generation failed", "failed", aiResult.message, null, {
+      setup_link_generated: true,
+      ai_generation_failed: true,
+      ai_generation_reason: aiResult.reason,
+      ai_error_message: aiResult.message
+    });
+    return {
+      status: "failed",
+      message: `AI welcome email generation failed: ${aiResult.message}`
+    };
+  }
+
+  const html = renderWelcomeEmailHtml(aiResult.content, setupLink, organizationSettings?.organization_name || "Organization");
+  const plainText = renderWelcomeEmailText(aiResult.content, setupLink, organizationSettings?.organization_name || "Organization");
 
   const result = await sendEmail({
     to: input.email,
-    subject,
-    text,
+    subject: aiResult.content.subject,
+    text: plainText,
     html
   });
 
   await logEmailAttempt(
     input,
     template,
-    subject,
+    aiResult.content.subject,
     result.status,
     result.status === "sent" ? null : result.message,
     result.providerMessageId ?? null,
     {
       missing_env: result.missingEnv ?? [],
-      setup_link_generated: Boolean(setupLink)
+      setup_link_generated: true,
+      ai_generation_used: true,
+      ai_model: aiResult.model
     }
   );
 
