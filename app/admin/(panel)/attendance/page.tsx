@@ -341,7 +341,8 @@ export default async function AdminAttendancePage({ searchParams }: Props) {
                           initialCheckOutTime={formatTimeInputValue(record.check_out_at, settings.timezone)}
                           dutyStartTime={dutyStartHHMM}
                           todayDate={today}
-                          currentOrgTime={currentOrgTimeHHMM}
+                          timezone={settings.timezone}
+                          initialCurrentOrgTime={currentOrgTimeHHMM}
                         />
                         <label className="grid gap-1 text-sm font-bold text-slate-700">
                           Status

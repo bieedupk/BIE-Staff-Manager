@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 type Props = {
   initialCheckInTime: string;
@@ -9,8 +9,10 @@ type Props = {
   dutyStartTime: string;
   /** "YYYY-MM-DD" — organization-local today date */
   todayDate: string;
-  /** "HH:MM" — current organization-local time (server-computed at render time) */
-  currentOrgTime: string;
+  /** IANA timezone string for the organization (e.g. "Asia/Karachi") */
+  timezone: string;
+  /** Optional initial "HH:MM" computed during server render */
+  initialCurrentOrgTime?: string;
   /** "YYYY-MM-DD" — the work_date of the record being corrected */
   initialCorrectionDate: string;
 };
@@ -20,12 +22,45 @@ export function AttendanceCorrectionHours({
   initialCheckOutTime,
   dutyStartTime,
   todayDate,
-  currentOrgTime,
+  timezone,
+  initialCurrentOrgTime,
   initialCorrectionDate
 }: Props) {
   const [correctionDate, setCorrectionDate] = useState(initialCorrectionDate);
   const [checkInTime, setCheckInTime] = useState(initialCheckInTime);
   const [checkOutTime, setCheckOutTime] = useState(initialCheckOutTime);
+  const [currentOrgTime, setCurrentOrgTime] = useState(
+    initialCurrentOrgTime || (timezone ? getOrgLocalTimeHHMM(timezone) : "")
+  );
+
+  const checkInRef = useRef<HTMLInputElement>(null);
+  const checkOutRef = useRef<HTMLInputElement>(null);
+
+  // Maintain live organization-local time so long-open pages track current time automatically
+  useEffect(() => {
+    if (!timezone) return;
+
+    const updateTime = () => {
+      const liveTime = getOrgLocalTimeHHMM(timezone);
+      if (liveTime) {
+        setCurrentOrgTime(liveTime);
+      }
+    };
+
+    updateTime();
+    const interval = setInterval(updateTime, 30_000);
+    return () => clearInterval(interval);
+  }, [timezone]);
+
+  // Clear any stale custom validity whenever the live clock updates
+  useEffect(() => {
+    if (checkInRef.current && checkInRef.current.validationMessage) {
+      checkInRef.current.setCustomValidity("");
+    }
+    if (checkOutRef.current && checkOutRef.current.validationMessage) {
+      checkOutRef.current.setCustomValidity("");
+    }
+  }, [currentOrgTime]);
 
   const isToday = correctionDate === todayDate;
 
@@ -65,6 +100,7 @@ export function AttendanceCorrectionHours({
   }
 
   function handleCheckInChange(event: React.ChangeEvent<HTMLInputElement>) {
+    event.currentTarget.setCustomValidity("");
     const newCheckIn = event.target.value;
     setCheckInTime(newCheckIn);
     if (checkOutTime && newCheckIn && checkOutTime < newCheckIn) {
@@ -72,8 +108,39 @@ export function AttendanceCorrectionHours({
     }
   }
 
+  function handleCheckInInvalid(event: React.InvalidEvent<HTMLInputElement>) {
+    const input = event.currentTarget;
+    if (input.validity.rangeOverflow) {
+      input.setCustomValidity("Enter the current time or an earlier time.");
+    } else if (input.validity.rangeUnderflow) {
+      input.setCustomValidity("Please select the duty start time or a later time.");
+    } else {
+      input.setCustomValidity("");
+    }
+  }
+
+  function handleCheckInInput(event: React.FormEvent<HTMLInputElement>) {
+    event.currentTarget.setCustomValidity("");
+  }
+
   function handleCheckOutChange(event: React.ChangeEvent<HTMLInputElement>) {
+    event.currentTarget.setCustomValidity("");
     setCheckOutTime(event.target.value);
+  }
+
+  function handleCheckOutInvalid(event: React.InvalidEvent<HTMLInputElement>) {
+    const input = event.currentTarget;
+    if (input.validity.rangeOverflow) {
+      input.setCustomValidity("Enter the current time or an earlier time.");
+    } else if (input.validity.rangeUnderflow) {
+      input.setCustomValidity("Please select the current time or an earlier time.");
+    } else {
+      input.setCustomValidity("");
+    }
+  }
+
+  function handleCheckOutInput(event: React.FormEvent<HTMLInputElement>) {
+    event.currentTarget.setCustomValidity("");
   }
 
   return (
@@ -93,53 +160,44 @@ export function AttendanceCorrectionHours({
       <label className="grid gap-1 text-sm font-bold text-slate-700">
         Check in time
         {checkInDisabledToday ? (
-          <>
-            <input
-              name="check_in_time"
-              type="time"
-              value=""
-              disabled
-              className="min-h-11 rounded-lg border border-slate-300 px-3 bg-slate-100 text-slate-400 cursor-not-allowed"
-            />
-            <span className="text-xs font-normal text-amber-600">
-              Cannot correct check-in before duty start ({dutyStartTime})
-            </span>
-          </>
+          <input
+            name="check_in_time"
+            type="time"
+            value=""
+            disabled
+            title={dutyStartTime ? `Cannot correct check-in before duty start (${dutyStartTime})` : "Cannot correct check-in before duty start"}
+            aria-label="Check in time (disabled before duty start)"
+            className="min-h-11 rounded-lg border border-slate-300 px-3 bg-slate-100 text-slate-400 cursor-not-allowed"
+          />
         ) : (
-          <>
-            <input
-              name="check_in_time"
-              type="time"
-              value={checkInTime}
-              min={checkInMin}
-              max={checkInMax}
-              onChange={handleCheckInChange}
-              className="min-h-11 rounded-lg border border-slate-300 px-3"
-            />
-            {isToday && checkInMin && checkInMax ? (
-              <span className="text-xs font-normal text-slate-500">
-                {checkInMin}–{checkInMax} (duty start to current time)
-              </span>
-            ) : checkInMin ? (
-              <span className="text-xs font-normal text-slate-500">Earliest: {checkInMin} (duty start)</span>
-            ) : null}
-          </>
+          <input
+            ref={checkInRef}
+            name="check_in_time"
+            type="time"
+            value={checkInTime}
+            min={checkInMin}
+            max={checkInMax}
+            onChange={handleCheckInChange}
+            onInput={handleCheckInInput}
+            onInvalid={handleCheckInInvalid}
+            className="min-h-11 rounded-lg border border-slate-300 px-3"
+          />
         )}
       </label>
       <label className="grid gap-1 text-sm font-bold text-slate-700">
         Check out time
         <input
+          ref={checkOutRef}
           name="check_out_time"
           type="time"
           value={checkOutTime}
           min={checkOutMin}
           max={checkOutMax}
           onChange={handleCheckOutChange}
+          onInput={handleCheckOutInput}
+          onInvalid={handleCheckOutInvalid}
           className="min-h-11 rounded-lg border border-slate-300 px-3"
         />
-        {isToday && currentOrgTime ? (
-          <span className="text-xs font-normal text-slate-500">Latest: {currentOrgTime} (current time)</span>
-        ) : null}
       </label>
       <label className="grid gap-1 text-sm font-bold text-slate-700">
         Total hours
@@ -155,6 +213,23 @@ export function AttendanceCorrectionHours({
       </label>
     </>
   );
+}
+
+function getOrgLocalTimeHHMM(timezone: string): string {
+  try {
+    const parts = new Intl.DateTimeFormat("en-GB", {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+      timeZone: timezone
+    }).formatToParts(new Date());
+    const hour = parts.find((p) => p.type === "hour")?.value ?? "";
+    const minute = parts.find((p) => p.type === "minute")?.value ?? "";
+    return hour && minute ? `${hour}:${minute}` : "";
+  } catch {
+    const d = new Date();
+    return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  }
 }
 
 function calculateTotalHours(checkInTime: string, checkOutTime: string) {
