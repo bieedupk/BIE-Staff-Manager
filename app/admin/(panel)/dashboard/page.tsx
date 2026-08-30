@@ -24,12 +24,12 @@ import { formatDate, isAdminManagerRole, todayISO } from "@/lib/utils";
 
 export default async function AdminDashboardPage() {
   const profile = await requireAdminProfile();
-  const locale = await getLocale();
   const supabase = isAdminManagerRole(profile.role) ? createAdminClient() : await createClient();
   const today = todayISO();
-  const settings = await getOrganizationSettings();
 
   const [
+    locale,
+    settings,
     employees,
     attendanceToday,
     pendingTasks,
@@ -37,6 +37,8 @@ export default async function AdminDashboardPage() {
     pendingLeaves,
     reportsToday
   ] = await Promise.all([
+    getLocale(),
+    getOrganizationSettings(),
     supabase.from("profiles").select("id, role, status"),
     supabase.from("attendance").select("employee_id, check_in_at, check_out_at, total_hours, status").eq("work_date", today),
     supabase.from("tasks").select("id", { count: "exact", head: true }).eq("status", "Pending"),

@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { redirect } from "next/navigation";
 import { hasPublicSupabaseEnv } from "@/lib/env";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -24,7 +25,7 @@ export async function getProfileByUserId(userId: string, options: { includeDisab
   return profile;
 }
 
-export async function getCurrentProfile() {
+export const getCurrentProfile = cache(async () => {
   if (!hasPublicSupabaseEnv()) {
     return null;
   }
@@ -37,7 +38,7 @@ export async function getCurrentProfile() {
   if (!user) return null;
 
   return getProfileByUserId(user.id);
-}
+});
 
 export async function requireProfile() {
   const profile = await getCurrentProfile();

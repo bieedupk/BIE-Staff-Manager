@@ -37,11 +37,6 @@ export default async function AdminDailyReportsPage({ searchParams }: Props) {
   const departmentFilter = resolvedSearchParams?.department || "";
   const statusFilter = dailyReportStatus(resolvedSearchParams?.status);
 
-  const [{ data: employees }, { data: departments }] = await Promise.all([
-    lookupSupabase.from("profiles").select("*").eq("role", "employee").eq("status", "active").order("full_name"),
-    lookupSupabase.from("departments").select("*").eq("is_active", true).order("sort_order", { ascending: true, nullsFirst: false }).order("name")
-  ]);
-
   let rawReportsQuery = reportSupabase
     .from("daily_reports")
     .select("*")
@@ -51,43 +46,63 @@ export default async function AdminDailyReportsPage({ searchParams }: Props) {
   if (employeeFilter) rawReportsQuery = rawReportsQuery.eq("employee_id", employeeFilter);
   if (statusFilter !== "all") rawReportsQuery = rawReportsQuery.eq("review_status", statusFilter);
 
-  const { data: rawReportData, error: rawReportsError } = await rawReportsQuery;
-  const rawReportRows = (rawReportData ?? []) as DailyReport[];
-  const rawReportReadSource: "admin" | "session" = adminSupabase ? "admin" : "session";
-  let sessionReportRows: DailyReport[] | null = null;
-  let sessionReportsError: { code?: string; message?: string } | null = null;
-
+  let sessionReportsQuery: any = null;
   if (adminSupabase) {
-    let sessionReportsQuery = sessionSupabase
+    let sessionQuery = sessionSupabase
       .from("daily_reports")
       .select("*")
       .eq("report_date", reportDate)
       .order("created_at", { ascending: false });
 
-    if (employeeFilter) sessionReportsQuery = sessionReportsQuery.eq("employee_id", employeeFilter);
-    if (statusFilter !== "all") sessionReportsQuery = sessionReportsQuery.eq("review_status", statusFilter);
-
-    const { data, error } = await sessionReportsQuery;
-    sessionReportRows = (data ?? []) as DailyReport[];
-    sessionReportsError = error;
+    if (employeeFilter) sessionQuery = sessionQuery.eq("employee_id", employeeFilter);
+    if (statusFilter !== "all") sessionQuery = sessionQuery.eq("review_status", statusFilter);
+    sessionReportsQuery = sessionQuery;
   }
+
+  const [
+    { data: employees },
+    { data: departments },
+    { data: rawReportData, error: rawReportsError },
+    sessionReportsResult
+  ] = await Promise.all([
+    lookupSupabase.from("profiles").select("*").eq("role", "employee").eq("status", "active").order("full_name"),
+    lookupSupabase.from("departments").select("*").eq("is_active", true).order("sort_order", { ascending: true, nullsFirst: false }).order("name"),
+    rawReportsQuery,
+    sessionReportsQuery ? sessionReportsQuery : Promise.resolve(null)
+  ]);
+
+  const rawReportRows = (rawReportData ?? []) as DailyReport[];
+  const rawReportReadSource: "admin" | "session" = adminSupabase ? "admin" : "session";
+  const sessionReportRows: DailyReport[] | null = sessionReportsResult ? ((sessionReportsResult.data ?? []) as DailyReport[]) : null;
+  const sessionReportsError: { code?: string; message?: string } | null = sessionReportsResult ? sessionReportsResult.error : null;
 
   const rawEmployeeIds = [...new Set(rawReportRows.map((report) => report.employee_id))];
   const reviewProfileIds = [...new Set(rawReportRows.flatMap((report) => (report.reviewed_by ? [report.reviewed_by] : [])))];
   const reportProfileIds = [...new Set([...rawEmployeeIds, ...reviewProfileIds])];
-  const { data: reportProfileRows, error: reportProfilesError } = reportProfileIds.length
-    ? await lookupSupabase
-        .from("profiles")
-        .select("id, full_name, department, department_id, designation")
-        .in("id", reportProfileIds)
-    : { data: [] as Array<Pick<Profile, "id" | "full_name" | "department" | "department_id" | "designation">>, error: null };
+
+  const [
+    { data: reportProfileRows, error: reportProfilesError },
+    assignmentsByEmployee,
+    { data: attendanceRows }
+  ] = await Promise.all([
+    reportProfileIds.length
+      ? lookupSupabase
+          .from("profiles")
+          .select("id, full_name, department, department_id, designation")
+          .in("id", reportProfileIds)
+      : Promise.resolve({ data: [] as Array<Pick<Profile, "id" | "full_name" | "department" | "department_id" | "designation">>, error: null }),
+    fetchEmployeeDepartmentsByEmployee(lookupSupabase, reportProfileIds),
+    rawEmployeeIds.length
+      ? lookupSupabase.from("attendance").select("*").eq("work_date", reportDate).in("employee_id", rawEmployeeIds)
+      : Promise.resolve({ data: [] as AttendanceRecord[] })
+  ]);
+
   const reportProfilesById = new Map(
     ((reportProfileRows ?? []) as Array<Pick<Profile, "id" | "full_name" | "department" | "department_id" | "designation">>).map((employee) => [
       employee.id,
       employee
     ])
   );
-  const assignmentsByEmployee = await fetchEmployeeDepartmentsByEmployee(lookupSupabase, reportProfileIds);
   const enrichedReports = rawReportRows.map((report) => ({
     ...report,
     profiles: reportProfilesById.get(report.employee_id) ?? null
@@ -121,10 +136,6 @@ export default async function AdminDailyReportsPage({ searchParams }: Props) {
     });
   }
 
-  const employeeIds = [...new Set(reports.map((report) => report.employee_id))];
-  const { data: attendanceRows } = employeeIds.length
-    ? await lookupSupabase.from("attendance").select("*").eq("work_date", reportDate).in("employee_id", employeeIds)
-    : { data: [] as AttendanceRecord[] };
   const attendanceByEmployee = new Map(((attendanceRows ?? []) as AttendanceRecord[]).map((record) => [record.employee_id, record]));
 
   return (

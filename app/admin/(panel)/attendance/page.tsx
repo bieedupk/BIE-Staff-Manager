@@ -56,15 +56,29 @@ export default async function AdminAttendancePage({ searchParams }: Props) {
   const employeeFilter = resolvedSearchParams?.employee || "";
   const dateParamProvided = Boolean(resolvedSearchParams?.date);
   const selectedDate = resolvedSearchParams?.date || "";
-  const settings = await getOrganizationSettings();
+  const attendanceQueryPromise = dateParamProvided
+    ? (() => {
+        let query = supabase
+          .from("attendance")
+          .select("*, profiles(id, full_name, email, department, department_id, designation)")
+          .eq("work_date", selectedDate)
+          .order("check_in_at", { ascending: false });
 
-  // Fetch all active employees
-  const { data: profiles } = await supabase
-    .from("profiles")
-    .select("*")
-    .eq("role", "employee")
-    .eq("status", "active")
-    .order("full_name");
+        if (employeeFilter) query = query.eq("employee_id", employeeFilter);
+        return query;
+      })()
+    : getRecentAttendanceForAll(today, "admin-attendance", employeeFilter || undefined);
+
+  const [settings, { data: profiles }, rawAttendanceResult] = await Promise.all([
+    getOrganizationSettings(),
+    supabase
+      .from("profiles")
+      .select("*")
+      .eq("role", "employee")
+      .eq("status", "active")
+      .order("full_name"),
+    attendanceQueryPromise
+  ]);
 
   const employees = (profiles ?? []) as Profile[];
   const profilesById = new Map(employees.map((employee) => [employee.id, employee]));
@@ -73,16 +87,11 @@ export default async function AdminAttendancePage({ searchParams }: Props) {
   let attendanceRows: AttendanceRecord[] = [];
 
   if (dateParamProvided) {
-    // User selected a specific date - fetch only that date
-    let attendanceQuery = supabase
-      .from("attendance")
-      .select("*, profiles(id, full_name, email, department, department_id, designation)")
-      .eq("work_date", selectedDate)
-      .order("check_in_at", { ascending: false });
-
-    if (employeeFilter) attendanceQuery = attendanceQuery.eq("employee_id", employeeFilter);
-
-    const { data, error: attendanceError } = await attendanceQuery;
+    // User selected a specific date - process fetched date records
+    const { data, error: attendanceError } = rawAttendanceResult as {
+      data: AttendanceRecord[] | null;
+      error: { code?: string; message?: string } | null;
+    };
 
     if (process.env.NODE_ENV !== "production") {
       console.info("[attendance:admin]", {
@@ -128,7 +137,7 @@ export default async function AdminAttendancePage({ searchParams }: Props) {
     // Default: show recent history with complete timeline
     const startDate = subtractDaysISO(today, DEFAULT_HISTORY_DAYS);
     const recentData = attachProfilesToAttendanceRows(
-      await getRecentAttendanceForAll(today, "admin-attendance", employeeFilter || undefined),
+      rawAttendanceResult as AttendanceRecord[],
       profilesById
     );
 
