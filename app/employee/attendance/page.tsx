@@ -34,16 +34,15 @@ export default async function EmployeeAttendancePage({
 }) {
   const profile = await requireEmployeeProfile();
   const today = todayISO();
+  const supabase = await createClient();
   const resolvedSearchParams = await searchParams;
   const historyDate = resolvedSearchParams?.history_date || "";
   const historyDateSelected = Boolean(historyDate);
-  const selectedToday = historyDate === today;
-  const supabase = await createClient();
 
   const [attendance, records] = await Promise.all([
     getTodayAttendanceForEmployee(profile.id, today, "employee-attendance"),
     (async () => {
-      if (historyDateSelected && !selectedToday) {
+      if (historyDateSelected) {
         // Specific date filter
         const { data } = await supabase
           .from("attendance")
@@ -52,12 +51,11 @@ export default async function EmployeeAttendancePage({
           .eq("work_date", historyDate)
           .order("check_in_at", { ascending: false });
         return (data ?? []) as AttendanceRecord[];
-      } else if (!historyDateSelected) {
+      } else {
         // Default: recent history with complete timeline including absent days
         const recentRecords = await getRecentAttendanceForEmployee(profile.id, today, "employee-attendance");
         return buildCompleteTimelineWithAbsent(recentRecords, profile, subtractDaysISO(today, DEFAULT_HISTORY_DAYS), today);
       }
-      return [] as AttendanceRecord[];
     })()
   ]);
 

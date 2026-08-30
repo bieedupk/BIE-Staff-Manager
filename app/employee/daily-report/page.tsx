@@ -17,13 +17,15 @@ export default async function EmployeeDailyReportPage({
 }) {
   const profile = await requireEmployeeProfile();
   const supabase = await createClient();
-  const resolvedSearchParams = await searchParams;
-  const { data } = await supabase
-    .from("daily_reports")
-    .select("*")
-    .eq("employee_id", profile.id)
-    .order("report_date", { ascending: false })
-    .limit(10);
+  const [resolvedSearchParams, { data }] = await Promise.all([
+    searchParams,
+    supabase
+      .from("daily_reports")
+      .select("*")
+      .eq("employee_id", profile.id)
+      .order("report_date", { ascending: false })
+      .limit(10)
+  ]);
   const reports = (data ?? []) as DailyReport[];
 
   return (

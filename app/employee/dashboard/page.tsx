@@ -1,4 +1,12 @@
 import Link from "next/link";
+import {
+  CalendarClock,
+  ListTodo,
+  CheckCircle2,
+  ClipboardCheck,
+  ClipboardX,
+  Clock
+} from "lucide-react";
 import { checkIn, checkOut } from "@/app/actions/attendance";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatCard } from "@/components/ui/stat-card";
@@ -8,7 +16,7 @@ import { requireEmployeeProfile } from "@/lib/auth";
 import { getLocale, t } from "@/lib/i18n";
 import { createClient } from "@/lib/supabase/server";
 import type { DailyReport, Task } from "@/lib/types";
-import { formatDateTime, todayISO } from "@/lib/utils";
+import { formatDate, formatDateTime, todayISO } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -22,22 +30,22 @@ export default async function EmployeeDashboardPage({
   }>;
 }) {
   const profile = await requireEmployeeProfile();
-  const locale = await getLocale();
-  const supabase = await createClient();
   const today = todayISO();
-  const resolvedSearchParams = await searchParams;
+  const supabase = await createClient();
 
-  const [todayAttendance, { data: tasks }, { data: report }] = await Promise.all([
+  const [locale, resolvedSearchParams, todayAttendance, { data: tasks }, { data: report }] = await Promise.all([
+    getLocale(),
+    searchParams,
     getTodayAttendanceForEmployee(profile.id, today, "employee-dashboard"),
-    supabase.from("tasks").select("*").eq("assigned_to", profile.id).order("due_date", { ascending: true }),
-    supabase.from("daily_reports").select("*").eq("employee_id", profile.id).eq("report_date", today).maybeSingle()
+    supabase.from("tasks").select("id, status, due_date").eq("assigned_to", profile.id).order("due_date", { ascending: true }),
+    supabase.from("daily_reports").select("id").eq("employee_id", profile.id).eq("report_date", today).maybeSingle()
   ]);
 
   const taskList = (tasks ?? []) as Task[];
   const todayTasks = taskList.filter((task) => task.due_date === today && task.status !== "Completed");
   const pendingTasks = taskList.filter((task) => task.status !== "Completed");
   const completedTasks = taskList.filter((task) => task.status === "Completed");
-  const dailyReport = report as DailyReport | null;
+  const dailyReport = report as Pick<DailyReport, "id"> | null;
   const attendanceStatus = attendanceDisplayStatus(todayAttendance);
 
   return (
@@ -45,10 +53,16 @@ export default async function EmployeeDashboardPage({
       <PageHeader title={t("dashboard", locale)} subtitle={t("employeeDashboardSubtitle", locale)} />
       <AttendanceMessage success={resolvedSearchParams?.attendance_success} error={resolvedSearchParams?.attendance_error} />
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="Today tasks" value={todayTasks.length} />
-        <StatCard label="Pending tasks" value={pendingTasks.length} />
-        <StatCard label="Completed tasks" value={completedTasks.length} />
-        <StatCard label="Daily report" value={dailyReport ? "Submitted" : "Missing"} />
+        <StatCard label="Today tasks" value={todayTasks.length} hint={formatDate(today)} href="/employee/tasks" icon={CalendarClock} />
+        <StatCard label="Pending tasks" value={pendingTasks.length} href="/employee/tasks" icon={ListTodo} />
+        <StatCard label="Completed tasks" value={completedTasks.length} href="/employee/tasks" icon={CheckCircle2} />
+        <StatCard
+          label="Daily report"
+          value={dailyReport ? "Submitted" : "Missing"}
+          hint={formatDate(today)}
+          href="/employee/daily-report"
+          icon={dailyReport ? ClipboardCheck : ClipboardX}
+        />
       </section>
 
       <section className="mt-5 grid gap-5 xl:grid-cols-2">
@@ -60,30 +74,30 @@ export default async function EmployeeDashboardPage({
             </div>
             <StatusBadge tone="attendance">{attendanceStatus}</StatusBadge>
           </div>
-          <div className="mt-4 grid gap-2 text-sm text-slate-600">
+          <div className="mt-4 grid gap-2 text-sm text-slate-600 grid-cols-1 sm:grid-cols-3">
             <div>
-              <p className="font-medium">Check in</p>
+              <p className="font-medium text-slate-700">Check in</p>
               <p>{formatDateTime(todayAttendance?.check_in_at)}</p>
             </div>
             <div>
-              <p className="font-medium">Check out</p>
+              <p className="font-medium text-slate-700">Check out</p>
               <p>{formatDateTime(todayAttendance?.check_out_at)}</p>
             </div>
             <div>
-              <p className="font-medium">Total hours</p>
+              <p className="font-medium text-slate-700">Total hours</p>
               <p>{todayAttendance?.total_hours ?? "-"}</p>
             </div>
           </div>
           <div className="mt-4 grid gap-2 sm:grid-cols-2">
             <form action={checkIn}>
               <input type="hidden" name="source_path" value="/employee/dashboard" />
-              <button disabled={Boolean(todayAttendance?.check_in_at)} className="min-h-11 w-full rounded-lg bg-bie-700 px-4 font-extrabold text-white disabled:opacity-50">
+              <button disabled={Boolean(todayAttendance?.check_in_at)} className="min-h-11 w-full rounded-lg bg-bie-700 px-4 font-extrabold text-white disabled:opacity-50 transition hover:bg-bie-800">
                 {t("checkIn", locale)}
               </button>
             </form>
             <form action={checkOut}>
               <input type="hidden" name="source_path" value="/employee/dashboard" />
-              <button disabled={!todayAttendance?.check_in_at || Boolean(todayAttendance?.check_out_at)} className="min-h-11 w-full rounded-lg border border-emerald-200 px-4 font-extrabold text-bie-700 disabled:opacity-50">
+              <button disabled={!todayAttendance?.check_in_at || Boolean(todayAttendance?.check_out_at)} className="min-h-11 w-full rounded-lg border border-emerald-200 px-4 font-extrabold text-bie-700 disabled:opacity-50 transition hover:bg-emerald-50">
                 {t("checkOut", locale)}
               </button>
             </form>
@@ -91,19 +105,38 @@ export default async function EmployeeDashboardPage({
         </div>
 
         <div className="rounded-lg border border-emerald-100 bg-white p-4 shadow-soft">
-          <h2 className="font-extrabold text-slate-950">Quick Actions</h2>
-          <div className="mt-4 grid gap-2 sm:grid-cols-2">
-            <Link className="rounded-lg bg-emerald-50 p-3 text-sm font-bold text-bie-700" href="/employee/tasks">
-              Update tasks
+          <div>
+            <h2 className="font-extrabold text-slate-950">Quick Actions</h2>
+            <p className="mt-1 text-sm font-medium text-slate-500">Shortcuts to manage your daily tasks, reports, and leaves.</p>
+          </div>
+          <div className="mt-4 grid gap-2.5 sm:grid-cols-2">
+            <Link
+              className="relative flex items-center justify-between overflow-hidden rounded-lg border border-emerald-100 bg-emerald-50 p-3.5 text-sm font-bold text-bie-700 transition hover:border-emerald-200 hover:bg-emerald-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bie-700 focus-visible:ring-offset-2"
+              href="/employee/tasks"
+            >
+              <span>Update tasks</span>
+              <ListTodo className="h-5 w-5 text-emerald-600" aria-hidden="true" />
             </Link>
-            <Link className="rounded-lg bg-emerald-50 p-3 text-sm font-bold text-bie-700" href="/employee/daily-report">
-              Submit daily report
+            <Link
+              className="relative flex items-center justify-between overflow-hidden rounded-lg border border-emerald-100 bg-emerald-50 p-3.5 text-sm font-bold text-bie-700 transition hover:border-emerald-200 hover:bg-emerald-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bie-700 focus-visible:ring-offset-2"
+              href="/employee/daily-report"
+            >
+              <span>Submit daily report</span>
+              <ClipboardCheck className="h-5 w-5 text-emerald-600" aria-hidden="true" />
             </Link>
-            <Link className="rounded-lg bg-emerald-50 p-3 text-sm font-bold text-bie-700" href="/employee/leave">
-              Request leave
+            <Link
+              className="relative flex items-center justify-between overflow-hidden rounded-lg border border-emerald-100 bg-emerald-50 p-3.5 text-sm font-bold text-bie-700 transition hover:border-emerald-200 hover:bg-emerald-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bie-700 focus-visible:ring-offset-2"
+              href="/employee/leave"
+            >
+              <span>Request leave</span>
+              <CalendarClock className="h-5 w-5 text-emerald-600" aria-hidden="true" />
             </Link>
-            <Link className="rounded-lg bg-emerald-50 p-3 text-sm font-bold text-bie-700" href="/employee/attendance">
-              View attendance history
+            <Link
+              className="relative flex items-center justify-between overflow-hidden rounded-lg border border-emerald-100 bg-emerald-50 p-3.5 text-sm font-bold text-bie-700 transition hover:border-emerald-200 hover:bg-emerald-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bie-700 focus-visible:ring-offset-2"
+              href="/employee/attendance"
+            >
+              <span>View attendance history</span>
+              <Clock className="h-5 w-5 text-emerald-600" aria-hidden="true" />
             </Link>
           </div>
         </div>

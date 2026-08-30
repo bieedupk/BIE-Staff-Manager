@@ -18,9 +18,12 @@ export const revalidate = 0;
 
 export default async function EmployeeLayout({ children }: { children: React.ReactNode }) {
   const profile = await requireEmployeeProfile();
-  const locale = await getLocale();
-  const departments = await getEmployeeDepartmentNames(profile.id, profile.department);
-  const deviceAccess = await verifyEmployeeDeviceAccess(profile, await currentDeviceRequestInfo(), {
+  const [locale, departments, deviceInfo] = await Promise.all([
+    getLocale(),
+    getEmployeeDepartmentNames(profile.id, profile.department),
+    currentDeviceRequestInfo()
+  ]);
+  const deviceAccess = await verifyEmployeeDeviceAccess(profile, deviceInfo, {
     logMobileBlocked: true
   });
 
