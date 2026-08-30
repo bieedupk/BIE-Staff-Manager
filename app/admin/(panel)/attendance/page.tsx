@@ -84,6 +84,27 @@ export default async function AdminAttendancePage({ searchParams }: Props) {
   const employees = (profiles ?? []) as Profile[];
   const profilesById = new Map(employees.map((employee) => [employee.id, employee]));
 
+  // Compute org-local current time (HH:MM) for checkout constraint
+  const currentOrgTimeHHMM = (() => {
+    try {
+      const parts = new Intl.DateTimeFormat("en-GB", {
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+        timeZone: settings.timezone
+      }).formatToParts(new Date());
+      const hour = parts.find((p) => p.type === "hour")?.value ?? "";
+      const minute = parts.find((p) => p.type === "minute")?.value ?? "";
+      return hour && minute ? `${hour}:${minute}` : "";
+    } catch {
+      return "";
+    }
+  })();
+
+  // Strip seconds from "09:00:00" → "09:00"
+  const dutyStartHHMM = settings.office_start_time?.slice(0, 5) ?? "";
+
+
   // Decide whether to show recent history or a specific date
   let attendanceRows: AttendanceRecord[] = [];
 
@@ -314,20 +335,13 @@ export default async function AdminAttendancePage({ searchParams }: Props) {
                         {isSyntheticAbsentRecord(record) && (
                           <input type="hidden" name="employee_id" value={record.employee_id} />
                         )}
-                        <label className="grid gap-1 text-sm font-bold text-slate-700">
-                          Correction date
-                          <input
-                            name="correction_date"
-                            type="date"
-                            required
-                            defaultValue={record.work_date || selectedDate}
-                            max={today}
-                            className="min-h-11 rounded-lg border border-slate-300 px-3"
-                          />
-                        </label>
                         <AttendanceCorrectionHours
+                          initialCorrectionDate={record.work_date || selectedDate}
                           initialCheckInTime={formatTimeInputValue(record.check_in_at, settings.timezone)}
                           initialCheckOutTime={formatTimeInputValue(record.check_out_at, settings.timezone)}
+                          dutyStartTime={dutyStartHHMM}
+                          todayDate={today}
+                          currentOrgTime={currentOrgTimeHHMM}
                         />
                         <label className="grid gap-1 text-sm font-bold text-slate-700">
                           Status

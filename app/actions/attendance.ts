@@ -230,6 +230,80 @@ export async function correctAttendance(formData: FormData) {
     redirectWithAttendanceCorrectionMessage(returnPath, "error", "Attendance record id is required.");
   }
 
+  // ── Business rule validation ─────────────────────────────────────────────────
+
+  // 1. Future date check: correctionDate must not be later than today in org timezone
+  const orgTodayISO = (() => {
+    try {
+      const parts = new Intl.DateTimeFormat("en-CA", {
+        timeZone: settings.timezone,
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit"
+      }).formatToParts(new Date());
+      const y = parts.find((p) => p.type === "year")?.value ?? "";
+      const m = parts.find((p) => p.type === "month")?.value ?? "";
+      const d = parts.find((p) => p.type === "day")?.value ?? "";
+      return `${y}-${m}-${d}`;
+    } catch {
+      return new Date().toISOString().slice(0, 10);
+    }
+  })();
+
+  if (correctionDate > orgTodayISO) {
+    redirectWithAttendanceCorrectionMessage(returnPath, "error", "Attendance cannot be recorded for a future date.");
+  }
+
+  // 2. Check-in must not be earlier than configured duty start time
+  if (checkInTime) {
+    const dutyStartHHMM = settings.office_start_time?.slice(0, 5) ?? "";
+    if (dutyStartHHMM && checkInTime < dutyStartHHMM) {
+      redirectWithAttendanceCorrectionMessage(
+        returnPath,
+        "error",
+        "Check-in time cannot be earlier than the configured duty start time."
+      );
+    }
+  }
+
+  // Resolve current org-local time once — shared by rules 2b and 3
+  const currentOrgTimeHHMM = (() => {
+    try {
+      const parts = new Intl.DateTimeFormat("en-GB", {
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+        timeZone: settings.timezone
+      }).formatToParts(new Date());
+      const hour = parts.find((p) => p.type === "hour")?.value ?? "";
+      const minute = parts.find((p) => p.type === "minute")?.value ?? "";
+      return hour && minute ? `${hour}:${minute}` : "";
+    } catch {
+      return "";
+    }
+  })();
+
+  // 2b. If correction date is today: check-in must not be later than current org-local time
+  if (checkInTime && correctionDate === orgTodayISO) {
+    if (currentOrgTimeHHMM && checkInTime > currentOrgTimeHHMM) {
+      redirectWithAttendanceCorrectionMessage(returnPath, "error", "Check-in time cannot be later than the current time.");
+    }
+  }
+
+  // 3. If correction date is today: check-out must not be later than current org-local time
+  if (checkOutTime && correctionDate === orgTodayISO) {
+    if (currentOrgTimeHHMM && checkOutTime > currentOrgTimeHHMM) {
+      redirectWithAttendanceCorrectionMessage(returnPath, "error", "Check-out time cannot be later than the current time.");
+    }
+  }
+
+  // 4. Check-out must not precede check-in
+  if (checkInTime && checkOutTime && checkOutTime < checkInTime) {
+    redirectWithAttendanceCorrectionMessage(returnPath, "error", "Check-out time cannot be earlier than check-in time.");
+  }
+
+  // ── End business rule validation ─────────────────────────────────────────────
+
   const isSyntheticAbsent = id.startsWith("synthetic-absent-");
   const status = String(formData.get("status") || "Present");
 
