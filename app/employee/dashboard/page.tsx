@@ -7,6 +7,7 @@ import {
   ClipboardX,
   Clock
 } from "lucide-react";
+import { SubmitButton } from "@/components/ui/submit-button";
 import { checkIn, checkOut } from "@/app/actions/attendance";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatCard } from "@/components/ui/stat-card";
@@ -91,15 +92,23 @@ export default async function EmployeeDashboardPage({
           <div className="mt-4 grid gap-2 sm:grid-cols-2">
             <form action={checkIn}>
               <input type="hidden" name="source_path" value="/employee/dashboard" />
-              <button disabled={Boolean(todayAttendance?.check_in_at)} className="min-h-11 w-full rounded-lg bg-bie-700 px-4 font-extrabold text-white disabled:opacity-50 transition hover:bg-bie-800">
+              <SubmitButton
+                disabled={Boolean(todayAttendance?.check_in_at)}
+                pendingText="Checking in..."
+                className="min-h-11 w-full rounded-lg bg-bie-700 px-4 font-extrabold text-white disabled:opacity-50 transition hover:bg-bie-800"
+              >
                 {t("checkIn", locale)}
-              </button>
+              </SubmitButton>
             </form>
             <form action={checkOut}>
               <input type="hidden" name="source_path" value="/employee/dashboard" />
-              <button disabled={!todayAttendance?.check_in_at || Boolean(todayAttendance?.check_out_at)} className="min-h-11 w-full rounded-lg border border-emerald-200 px-4 font-extrabold text-bie-700 disabled:opacity-50 transition hover:bg-emerald-50">
+              <SubmitButton
+                disabled={!todayAttendance?.check_in_at || Boolean(todayAttendance?.check_out_at)}
+                pendingText="Checking out..."
+                className="min-h-11 w-full rounded-lg border border-emerald-200 px-4 font-extrabold text-bie-700 disabled:opacity-50 transition hover:bg-emerald-50"
+              >
                 {t("checkOut", locale)}
-              </button>
+              </SubmitButton>
             </form>
           </div>
         </div>

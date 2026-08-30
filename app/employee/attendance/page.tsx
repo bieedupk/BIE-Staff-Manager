@@ -1,4 +1,5 @@
 import { checkIn, checkOut } from "@/app/actions/attendance";
+import { SubmitButton } from "@/components/ui/submit-button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatusBadge } from "@/components/ui/status-badge";
@@ -92,15 +93,23 @@ export default async function EmployeeAttendancePage({
         <div className="mt-4 grid gap-2 sm:grid-cols-2">
           <form action={checkIn}>
             <input type="hidden" name="source_path" value="/employee/attendance" />
-            <button disabled={Boolean(attendance?.check_in_at)} className="min-h-11 w-full rounded-lg bg-bie-700 px-4 font-extrabold text-white disabled:opacity-50">
+            <SubmitButton
+              disabled={Boolean(attendance?.check_in_at)}
+              pendingText="Checking in..."
+              className="min-h-11 w-full rounded-lg bg-bie-700 px-4 font-extrabold text-white disabled:opacity-50 transition hover:bg-bie-800"
+            >
               Check In
-            </button>
+            </SubmitButton>
           </form>
           <form action={checkOut}>
             <input type="hidden" name="source_path" value="/employee/attendance" />
-            <button disabled={!attendance?.check_in_at || Boolean(attendance?.check_out_at)} className="min-h-11 w-full rounded-lg border border-emerald-200 px-4 font-extrabold text-bie-700 disabled:opacity-50">
+            <SubmitButton
+              disabled={!attendance?.check_in_at || Boolean(attendance?.check_out_at)}
+              pendingText="Checking out..."
+              className="min-h-11 w-full rounded-lg border border-emerald-200 px-4 font-extrabold text-bie-700 disabled:opacity-50 transition hover:bg-emerald-50"
+            >
               Check Out
-            </button>
+            </SubmitButton>
           </form>
         </div>
       </section>

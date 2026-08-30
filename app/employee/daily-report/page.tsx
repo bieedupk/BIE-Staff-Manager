@@ -2,6 +2,7 @@ import { Star } from "lucide-react";
 import { submitDailyReport } from "@/app/actions/reports";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
+import { SubmitButton } from "@/components/ui/submit-button";
 import { requireEmployeeProfile } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import type { DailyReport } from "@/lib/types";
@@ -47,7 +48,9 @@ export default async function EmployeeDailyReportPage({
           <Textarea name="challenges" label="Challenges" />
           <Textarea name="tomorrow_plan" label="Tomorrow plan" />
           <div className="md:col-span-2">
-            <button className="min-h-11 rounded-lg bg-bie-700 px-4 font-extrabold text-white">Submit report</button>
+            <SubmitButton pendingText="Submitting report..." className="min-h-11 rounded-lg bg-bie-700 px-4 font-extrabold text-white transition hover:bg-bie-800 disabled:opacity-50">
+              Submit report
+            </SubmitButton>
           </div>
         </form>
       </section>

@@ -1,6 +1,7 @@
 import { createDepartment, updateDepartment } from "@/app/actions/admin";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
+import { SubmitButton } from "@/components/ui/submit-button";
 import { requireAdminManagerProfile } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import type { Department } from "@/lib/types";
@@ -19,7 +20,9 @@ export default async function AdminDepartmentsPage() {
       <section className="rounded-lg border border-emerald-100 bg-white p-4 shadow-soft">
         <form action={createDepartment} className="grid gap-3 sm:grid-cols-[1fr_auto]">
           <input name="name" placeholder="Department name" required className="min-h-11 rounded-lg border border-slate-300 px-3" />
-          <button className="min-h-11 rounded-lg bg-bie-700 px-4 font-extrabold text-white">Add department</button>
+          <SubmitButton pendingText="Adding..." className="min-h-11 rounded-lg bg-bie-700 px-4 font-extrabold text-white transition hover:bg-bie-800 disabled:opacity-50">
+            Add department
+          </SubmitButton>
         </form>
       </section>
 
@@ -54,7 +57,9 @@ function DepartmentForm({ department }: { department: Department }) {
         <input type="checkbox" name="is_active" defaultChecked={department.is_active} />
         Active
       </label>
-      <button className="min-h-11 rounded-lg bg-bie-700 px-4 font-extrabold text-white">Save</button>
+      <SubmitButton pendingText="Saving..." className="min-h-11 rounded-lg bg-bie-700 px-4 font-extrabold text-white transition hover:bg-bie-800 disabled:opacity-50">
+        Save
+      </SubmitButton>
     </form>
   );
 }

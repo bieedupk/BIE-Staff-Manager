@@ -4,6 +4,7 @@ import { ReviewRating } from "@/app/admin/daily-reports/review-rating";
 import { ResetTestReportButton } from "@/app/admin/daily-reports/reset-test-report-button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
+import { SubmitButton } from "@/components/ui/submit-button";
 import { requireAdminProfile } from "@/lib/auth";
 import { departmentTextForProfile, fetchEmployeeDepartmentsByEmployee } from "@/lib/employee-departments";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -290,7 +291,9 @@ export default async function AdminDailyReportsPage({ searchParams }: Props) {
                         <textarea name="review_comment" className="rounded-lg border border-slate-300 px-3 py-2" dir="auto" />
                       </label>
                       <div>
-                        <button className="min-h-10 rounded-lg bg-bie-700 px-4 text-sm font-extrabold text-white">Save Review</button>
+                        <SubmitButton pendingText="Saving Review..." className="min-h-10 rounded-lg bg-bie-700 px-4 text-sm font-extrabold text-white transition hover:bg-bie-800 disabled:opacity-50">
+                          Save Review
+                        </SubmitButton>
                       </div>
                     </form>
                   )}

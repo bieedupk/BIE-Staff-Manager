@@ -660,7 +660,7 @@ export async function createDepartment(formData: FormData) {
   });
   if (error) throw new Error(error.message);
 
-  await logAudit("department created", "departments", null, { name: formData.get("name") });
+  await logAudit("department created", "departments", null, { name: formData.get("name") }, { actorId: currentProfile.id });
   revalidatePath("/admin/departments");
 }
 
@@ -679,6 +679,6 @@ export async function updateDepartment(formData: FormData) {
     .eq("id", id);
   if (error) throw new Error(error.message);
 
-  await logAudit("department edited", "departments", id);
+  await logAudit("department edited", "departments", id, undefined, { actorId: currentProfile.id });
   revalidatePath("/admin/departments");
 }

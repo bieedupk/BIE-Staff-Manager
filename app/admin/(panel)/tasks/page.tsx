@@ -2,6 +2,7 @@ import { assignTask } from "@/app/actions/tasks";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { SubmitButton } from "@/components/ui/submit-button";
 import { createClient } from "@/lib/supabase/server";
 import type { Department, Profile, Task, TaskPriority, TaskStatus } from "@/lib/types";
 import { formatDate, todayISO } from "@/lib/utils";
@@ -80,7 +81,9 @@ export default async function AdminTasksPage() {
             <textarea name="description" required className="rounded-lg border border-slate-300 px-3 py-2" />
           </label>
           <div className="md:col-span-2 xl:col-span-3">
-            <button className="min-h-11 rounded-lg bg-bie-700 px-4 font-extrabold text-white">Assign task</button>
+            <SubmitButton pendingText="Assigning task..." className="min-h-11 rounded-lg bg-bie-700 px-4 font-extrabold text-white transition hover:bg-bie-800 disabled:opacity-50">
+              Assign task
+            </SubmitButton>
           </div>
         </form>
       </section>

@@ -4,6 +4,7 @@ import { disableAuthorizedDevice, registerAuthorizedDevice, resetAuthorizedDevic
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { SubmitButton } from "@/components/ui/submit-button";
 import { requireAdminProfile } from "@/lib/auth";
 import { departmentDisplayName } from "@/lib/department-utils";
 import { ensureDefaultDepartments } from "@/lib/default-departments";
@@ -154,7 +155,9 @@ export default async function AdminEmployeesPage({
             </select>
           </label>
           <div className="md:col-span-2 xl:col-span-3">
-            <button className="min-h-11 rounded-lg bg-bie-700 px-4 font-extrabold text-white">Create employee</button>
+            <SubmitButton pendingText="Creating employee..." className="min-h-11 rounded-lg bg-bie-700 px-4 font-extrabold text-white transition hover:bg-bie-800 disabled:opacity-50">
+              Create employee
+            </SubmitButton>
           </div>
         </form>
         ) : (
@@ -206,17 +209,17 @@ export default async function AdminEmployeesPage({
                     {employee.welcome_email_mode === "manual" && ["pending", "failed", "skipped"].includes(employee.welcome_email_status) ? (
                       <form action={sendManualEmployeeWelcomeEmail}>
                         <input type="hidden" name="id" value={employee.id} />
-                        <button className="rounded-lg bg-bie-700 px-3 py-2 text-sm font-extrabold text-white">
+                        <SubmitButton pendingText="Sending..." className="rounded-lg bg-bie-700 px-3 py-2 text-sm font-extrabold text-white transition hover:bg-bie-800 disabled:opacity-50">
                           Send Welcome Email
-                        </button>
+                        </SubmitButton>
                       </form>
                     ) : null}
                     <form action={setEmployeeStatus}>
                       <input type="hidden" name="id" value={employee.id} />
                       <input type="hidden" name="status" value={employee.status === "active" ? "disabled" : "active"} />
-                      <button className="rounded-lg border border-red-200 px-3 py-2 text-sm font-bold text-red-700">
+                      <SubmitButton pendingText="Updating..." className="rounded-lg border border-red-200 px-3 py-2 text-sm font-bold text-red-700 transition hover:bg-red-50 disabled:opacity-50">
                         {employee.status === "active" ? "Disable" : "Enable"}
-                      </button>
+                      </SubmitButton>
                     </form>
                   </div>
                 ) : null}
@@ -262,7 +265,9 @@ export default async function AdminEmployeesPage({
                   </label>
                   <p className="text-sm font-medium text-slate-500">Joined: {formatDate(employee.joining_date)}</p>
                   <div className="md:col-span-2 xl:col-span-3">
-                    <button className="min-h-11 rounded-lg bg-bie-700 px-4 font-extrabold text-white">Save changes</button>
+                    <SubmitButton pendingText="Saving changes..." className="min-h-11 rounded-lg bg-bie-700 px-4 font-extrabold text-white transition hover:bg-bie-800 disabled:opacity-50">
+                      Save changes
+                    </SubmitButton>
                   </div>
                 </form>
               </details>
@@ -374,23 +379,23 @@ function AuthorizedDevicePanel({ devices, employeeId }: { devices: AuthorizedDev
           <>
             <form action={disableAuthorizedDevice}>
               <input type="hidden" name="employee_id" value={employeeId} />
-              <button className="rounded-lg border border-red-200 bg-white px-3 py-2 text-sm font-bold text-red-700">
+              <SubmitButton pendingText="Disabling..." className="rounded-lg border border-red-200 bg-white px-3 py-2 text-sm font-bold text-red-700 transition hover:bg-red-50 disabled:opacity-50">
                 Disable device
-              </button>
+              </SubmitButton>
             </form>
             <form action={resetAuthorizedDevice}>
               <input type="hidden" name="employee_id" value={employeeId} />
-              <button className="rounded-lg border border-emerald-200 bg-white px-3 py-2 text-sm font-bold text-bie-700">
+              <SubmitButton pendingText="Resetting..." className="rounded-lg border border-emerald-200 bg-white px-3 py-2 text-sm font-bold text-bie-700 transition hover:bg-emerald-50 disabled:opacity-50">
                 Reset device
-              </button>
+              </SubmitButton>
             </form>
           </>
         ) : (
           <form action={registerAuthorizedDevice}>
             <input type="hidden" name="employee_id" value={employeeId} />
-            <button className="rounded-lg bg-bie-700 px-3 py-2 text-sm font-extrabold text-white">
+            <SubmitButton pendingText="Registering..." className="rounded-lg bg-bie-700 px-3 py-2 text-sm font-extrabold text-white transition hover:bg-bie-800 disabled:opacity-50">
               Register this device
-            </button>
+            </SubmitButton>
           </form>
         )}
       </div>

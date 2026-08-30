@@ -138,11 +138,17 @@ export async function submitDailyReport(formData: FormData) {
       type = "error";
       message = dailyReportSubmitErrorMessage(error);
     } else {
-      await logAudit("daily_report_submitted", "daily_reports", report.id, {
-        attendance_id: attendance.id,
-        employee_id: profile.id,
-        report_date: reportDate
-      });
+      await logAudit(
+        "daily_report_submitted",
+        "daily_reports",
+        report.id,
+        {
+          attendance_id: attendance.id,
+          employee_id: profile.id,
+          report_date: reportDate
+        },
+        { actorId: profile.id }
+      );
     }
   }
 
@@ -215,9 +221,15 @@ export async function reviewDailyReport(formData: FormData) {
       message = dailyReportReviewErrorMessage(error);
     } else {
       returnPath = dailyReportsAdminPath(formData, "all");
-      await logAudit("daily_report_reviewed", "daily_reports", id, {
-        review_rating: reviewRating
-      });
+      await logAudit(
+        "daily_report_reviewed",
+        "daily_reports",
+        id,
+        {
+          review_rating: reviewRating
+        },
+        { actorId: profile.id }
+      );
     }
   }
 
@@ -257,12 +269,18 @@ export async function resetTestDailyReport(formData: FormData) {
       type = "error";
       message = "No daily report found for selected employee/date.";
     } else {
-      await logAudit("daily_report_test_reset", "daily_reports", deletedReports[0].id, {
-        deleted_report_ids: deletedReports.map((report) => report.id),
-        employee_id: employeeId,
-        report_date: reportDate,
-        reset_by: profile.id
-      });
+      await logAudit(
+        "daily_report_test_reset",
+        "daily_reports",
+        deletedReports[0].id,
+        {
+          deleted_report_ids: deletedReports.map((report) => report.id),
+          employee_id: employeeId,
+          report_date: reportDate,
+          reset_by: profile.id
+        },
+        { actorId: profile.id }
+      );
     }
   }
 

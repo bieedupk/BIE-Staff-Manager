@@ -172,7 +172,7 @@ export async function checkIn(formData: FormData) {
 
     if (error) throw new Error(error.message);
 
-    await logAudit("attendance check in", "attendance", null, { employee_id: profile.id });
+    await logAudit("attendance check in", "attendance", null, { employee_id: profile.id }, { actorId: profile.id });
   } catch (error) {
     type = "error";
     message = attendanceActionErrorMessage(error, "check_in");
@@ -196,7 +196,7 @@ export async function checkOut(formData: FormData) {
 
     if (error) throw new Error(error.message);
 
-    await logAudit("attendance check out", "attendance", null, { employee_id: profile.id });
+    await logAudit("attendance check out", "attendance", null, { employee_id: profile.id }, { actorId: profile.id });
   } catch (error) {
     type = "error";
     message = attendanceActionErrorMessage(error, "check_out");
@@ -207,7 +207,7 @@ export async function checkOut(formData: FormData) {
 }
 
 export async function correctAttendance(formData: FormData) {
-  await requireAdminManagerProfile();
+  const currentProfile = await requireAdminManagerProfile();
   const returnPath = adminAttendancePath(formData);
   const supabase = createAdminClient();
   const settings = await getOrganizationSettings();
@@ -290,7 +290,7 @@ export async function correctAttendance(formData: FormData) {
         correction_reason: correctionReason
       };
 
-      await logAudit("attendance_corrected", "attendance", existingByDate.id, auditDetails);
+      await logAudit("attendance_corrected", "attendance", existingByDate.id, auditDetails, { actorId: currentProfile.id });
     } else {
       // Insert new attendance record from synthetic absent correction
       const { data: insertedAttendance, error: insertError } = await supabase
@@ -326,7 +326,7 @@ export async function correctAttendance(formData: FormData) {
         created_from_synthetic_absent: true
       };
 
-      await logAudit("attendance_corrected", "attendance", insertedAttendance.id, auditDetails);
+      await logAudit("attendance_corrected", "attendance", insertedAttendance.id, auditDetails, { actorId: currentProfile.id });
     }
   } else {
     // Handle real attendance record correction (existing logic)
@@ -380,7 +380,7 @@ export async function correctAttendance(formData: FormData) {
       auditDetails.new_work_date = correctionDate;
     }
 
-    await logAudit("attendance_corrected", "attendance", id, auditDetails);
+    await logAudit("attendance_corrected", "attendance", id, auditDetails, { actorId: currentProfile.id });
   }
 
   revalidatePath("/admin/attendance");

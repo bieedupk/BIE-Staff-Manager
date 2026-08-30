@@ -2,6 +2,7 @@ import { reviewLeave } from "@/app/actions/leaves";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { SubmitButton } from "@/components/ui/submit-button";
 import { createClient } from "@/lib/supabase/server";
 import type { LeaveRequest } from "@/lib/types";
 import { formatDate } from "@/lib/utils";
@@ -36,12 +37,12 @@ export default async function AdminLeavesPage() {
                 <form action={reviewLeave} className="mt-4 grid gap-3 sm:grid-cols-[1fr_auto_auto]">
                   <input type="hidden" name="id" value={leave.id} />
                   <input name="admin_comment" placeholder="Admin comment" className="min-h-11 rounded-lg border border-slate-300 px-3" />
-                  <button name="status" value="Approved" className="min-h-11 rounded-lg bg-bie-700 px-4 font-extrabold text-white">
+                  <SubmitButton name="status" value="Approved" pendingText="Approving..." className="min-h-11 rounded-lg bg-bie-700 px-4 font-extrabold text-white transition hover:bg-bie-800 disabled:opacity-50">
                     Approve
-                  </button>
-                  <button name="status" value="Rejected" className="min-h-11 rounded-lg border border-red-200 px-4 font-extrabold text-red-700">
+                  </SubmitButton>
+                  <SubmitButton name="status" value="Rejected" pendingText="Rejecting..." className="min-h-11 rounded-lg border border-red-200 px-4 font-extrabold text-red-700 transition hover:bg-red-50 disabled:opacity-50">
                     Reject
-                  </button>
+                  </SubmitButton>
                 </form>
               ) : null}
             </article>

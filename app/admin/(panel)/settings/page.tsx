@@ -1,5 +1,7 @@
 import { updateOfficeTimingSettings, updateWelcomeEmailTemplate } from "@/app/actions/settings";
+import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
+import { SubmitButton } from "@/components/ui/submit-button";
 import { requireAdminProfile } from "@/lib/auth";
 import { fetchEmployeeDepartmentText } from "@/lib/employee-departments";
 import { getWelcomeEmailTemplate } from "@/lib/email/templates";
@@ -71,7 +73,9 @@ export default async function AdminSettingsPage({
               />
             </label>
             <div className="md:col-span-2">
-              <button className="min-h-11 rounded-lg bg-bie-700 px-4 font-extrabold text-white">Save Office Timing</button>
+              <SubmitButton pendingText="Saving..." className="min-h-11 rounded-lg bg-bie-700 px-4 font-extrabold text-white transition hover:bg-bie-800 disabled:opacity-50">
+                Save Office Timing
+              </SubmitButton>
             </div>
           </form>
         ) : (
@@ -138,7 +142,9 @@ export default async function AdminSettingsPage({
               />
             </label>
             <div>
-              <button className="min-h-11 rounded-lg bg-bie-700 px-4 font-extrabold text-white">Save Email Template</button>
+              <SubmitButton pendingText="Saving..." className="min-h-11 rounded-lg bg-bie-700 px-4 font-extrabold text-white transition hover:bg-bie-800 disabled:opacity-50">
+                Save Email Template
+              </SubmitButton>
             </div>
           </form>
         ) : (

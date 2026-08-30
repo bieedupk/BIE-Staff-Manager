@@ -20,7 +20,7 @@ export async function applyLeave(formData: FormData) {
   });
 
   if (error) throw new Error(error.message);
-  await logAudit("leave requested", "leave_requests", null);
+  await logAudit("leave requested", "leave_requests", null, undefined, { actorId: profile.id });
   revalidatePath("/employee/leave");
   revalidatePath("/admin/leaves");
 }
@@ -49,7 +49,7 @@ export async function reviewLeave(formData: FormData) {
     .eq("id", id);
 
   if (error) throw new Error(error.message);
-  await logAudit(`leave ${status.toLowerCase()}`, "leave_requests", id, { status });
+  await logAudit(`leave ${status.toLowerCase()}`, "leave_requests", id, { status }, { actorId: profile.id });
   revalidatePath("/admin/leaves");
   revalidatePath("/employee/leave");
 }

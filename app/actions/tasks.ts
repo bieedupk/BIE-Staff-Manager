@@ -41,13 +41,13 @@ export async function assignTask(formData: FormData) {
     .single();
 
   if (error) throw new Error(error.message);
-  await logAudit("task assigned", "tasks", task?.id, { title: formData.get("title") });
+  await logAudit("task assigned", "tasks", task?.id, { title: formData.get("title") }, { actorId: profile.id });
   revalidatePath("/admin/tasks");
   revalidatePath("/employee/tasks");
 }
 
 export async function updateMyTaskStatus(formData: FormData) {
-  await requireProfile();
+  const profile = await requireProfile();
   const supabase = await createClient();
   const taskId = String(formData.get("task_id"));
   const status = String(formData.get("status")) as TaskStatus;
@@ -62,7 +62,7 @@ export async function updateMyTaskStatus(formData: FormData) {
   });
 
   if (error) throw new Error(error.message);
-  await logAudit("task status changed", "tasks", taskId, { status });
+  await logAudit("task status changed", "tasks", taskId, { status }, { actorId: profile.id });
   revalidatePath("/employee/tasks");
   revalidatePath("/employee/dashboard");
   revalidatePath("/admin/tasks");

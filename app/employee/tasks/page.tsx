@@ -2,6 +2,7 @@ import { updateMyTaskStatus } from "@/app/actions/tasks";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { SubmitButton } from "@/components/ui/submit-button";
 import { requireEmployeeProfile } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import type { Task, TaskStatus } from "@/lib/types";
@@ -61,7 +62,9 @@ export default async function EmployeeTasksPage() {
                     <textarea name="completion_note" defaultValue={task.completion_note ?? ""} className="rounded-lg border border-slate-300 px-3 py-2" />
                   </label>
                   <div className="md:col-span-2">
-                    <button className="min-h-11 rounded-lg bg-bie-700 px-4 font-extrabold text-white">Update task</button>
+                    <SubmitButton pendingText="Updating task..." className="min-h-11 rounded-lg bg-bie-700 px-4 font-extrabold text-white transition hover:bg-bie-800 disabled:opacity-50">
+                      Update task
+                    </SubmitButton>
                   </div>
                 </form>
               </article>

@@ -4,6 +4,7 @@ import { AttendanceCorrectionHours } from "@/components/admin/attendance-correct
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { SubmitButton } from "@/components/ui/submit-button";
 import { deriveAttendanceFlags, formatDurationFromHours, getRecentAttendanceForAll, buildCompleteTimelineWithAbsent } from "@/lib/attendance";
 import { requireAdminProfile } from "@/lib/auth";
 import { departmentTextForProfile, fetchEmployeeDepartmentsByEmployee } from "@/lib/employee-departments";
@@ -346,9 +347,9 @@ export default async function AdminAttendancePage({ searchParams }: Props) {
                             className="min-h-11 rounded-lg border border-slate-300 px-3"
                           />
                         </label>
-                        <button className="min-h-11 self-end rounded-lg bg-bie-700 px-4 font-extrabold text-white">
+                        <SubmitButton pendingText="Saving correction..." className="min-h-11 self-end rounded-lg bg-bie-700 px-4 font-extrabold text-white transition hover:bg-bie-800 disabled:opacity-50">
                           Save correction
-                        </button>
+                        </SubmitButton>
                       </form>
                     </details>
                   ) : null}

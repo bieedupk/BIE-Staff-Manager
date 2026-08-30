@@ -2,6 +2,7 @@ import { applyLeave } from "@/app/actions/leaves";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { SubmitButton } from "@/components/ui/submit-button";
 import { requireEmployeeProfile } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import type { LeaveRequest } from "@/lib/types";
@@ -42,7 +43,9 @@ export default async function EmployeeLeavePage() {
             <textarea name="reason" required className="rounded-lg border border-slate-300 px-3 py-2" />
           </label>
           <div className="md:col-span-2">
-            <button className="min-h-11 rounded-lg bg-bie-700 px-4 font-extrabold text-white">Submit leave request</button>
+            <SubmitButton pendingText="Submitting leave request..." className="min-h-11 rounded-lg bg-bie-700 px-4 font-extrabold text-white transition hover:bg-bie-800 disabled:opacity-50">
+              Submit leave request
+            </SubmitButton>
           </div>
         </form>
       </section>

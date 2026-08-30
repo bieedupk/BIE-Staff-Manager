@@ -114,11 +114,11 @@ export async function verifyEmployeeDeviceAccess(
   const admin = createAdminClient();
   const { data: device } = await admin
     .from("authorized_devices")
-    .select("id")
+    .select("id, last_used_at")
     .eq("employee_id", profile.id)
     .eq("device_token_hash", hashDeviceToken(requestInfo.deviceToken))
     .eq("status", "active")
-    .maybeSingle();
+    .maybeSingle<{ id: string; last_used_at: string | null }>();
 
   if (!device) {
     return {
@@ -128,14 +128,21 @@ export async function verifyEmployeeDeviceAccess(
     };
   }
 
-  await admin
-    .from("authorized_devices")
-    .update({
-      last_used_at: new Date().toISOString(),
-      last_ip: requestInfo.ip,
-      last_user_agent: requestInfo.userAgent
-    })
-    .eq("id", device.id);
+  const DEVICE_LAST_USED_THROTTLE_MS = 5 * 60 * 1000;
+  const now = Date.now();
+  const lastUsedTime = device.last_used_at ? new Date(device.last_used_at).getTime() : 0;
+  const shouldUpdateLastUsed = !device.last_used_at || Number.isNaN(lastUsedTime) || now - lastUsedTime > DEVICE_LAST_USED_THROTTLE_MS;
+
+  if (shouldUpdateLastUsed) {
+    await admin
+      .from("authorized_devices")
+      .update({
+        last_used_at: new Date().toISOString(),
+        last_ip: requestInfo.ip,
+        last_user_agent: requestInfo.userAgent
+      })
+      .eq("id", device.id);
+  }
 
   return { allowed: true };
 }
