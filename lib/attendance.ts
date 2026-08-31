@@ -2,7 +2,8 @@ import "server-only";
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
-import type { AttendanceRecord, OrganizationSettings, Profile } from "@/lib/types";
+import type { AttendanceRecord, AttendanceStatus, OrganizationSettings, Profile } from "@/lib/types";
+import { formatTime, formatWorkedDuration, getHalfDayThresholdHours, isDutyEndedForDate, isOfficeHoursEnded, getOrgCurrentTimeHHMM, parseTimeToMinutes, todayISOInTimezone } from "@/lib/utils";
 
 const existingHalfDayThresholdHours = 4;
 const DEFAULT_HISTORY_DAYS = 10;
@@ -192,7 +193,8 @@ export async function getRecentAttendanceForAll(
 export function createSyntheticAbsentRecord(
   employeeId: string,
   workDate: string,
-  profile: Pick<Profile, "id" | "full_name" | "email" | "department" | "department_id" | "designation">
+  profile: Pick<Profile, "id" | "full_name" | "email" | "department" | "department_id" | "designation">,
+  status: AttendanceStatus = "Absent"
 ): AttendanceRecord {
   return {
     id: `synthetic-absent-${employeeId}-${workDate}`,
@@ -201,7 +203,7 @@ export function createSyntheticAbsentRecord(
     check_in_at: null,
     check_out_at: null,
     total_hours: null,
-    status: "Absent",
+    status,
     created_at: new Date().toISOString(),
     profiles: profile
   };
@@ -211,25 +213,38 @@ export function buildCompleteTimelineWithAbsent(
   actualRecords: AttendanceRecord[],
   employee: Profile,
   startDate: string,
-  endDate: string
+  endDate: string,
+  settings?: Pick<OrganizationSettings, "office_end_time" | "timezone">
 ): AttendanceRecord[] {
   const recordsByDate = new Map(actualRecords.map((r) => [r.work_date, r]));
   const dates = getDateRange(startDate, endDate);
 
-  const timeline = dates
-    .reverse() // Latest first
-    .map((date) => {
-      const existing = recordsByDate.get(date);
-      if (existing) return existing;
-      return createSyntheticAbsentRecord(employee.id, date, {
-        id: employee.id,
-        full_name: employee.full_name,
-        email: employee.email,
-        department: employee.department,
-        department_id: employee.department_id,
-        designation: employee.designation
-      });
-    });
+  const timeline: AttendanceRecord[] = [];
+  for (const date of dates.reverse()) {
+    const existing = recordsByDate.get(date);
+    if (existing) {
+      timeline.push(existing);
+      continue;
+    }
+    if (settings && !isDutyEndedForDate(date, settings)) {
+      continue;
+    }
+    timeline.push(
+      createSyntheticAbsentRecord(
+        employee.id,
+        date,
+        {
+          id: employee.id,
+          full_name: employee.full_name,
+          email: employee.email,
+          department: employee.department,
+          department_id: employee.department_id,
+          designation: employee.designation
+        },
+        "Absent"
+      )
+    );
+  }
 
   return timeline;
 }
@@ -241,72 +256,86 @@ export function attendanceDisplayStatus(attendance: AttendanceRecord | null) {
 }
 
 export function formatDurationFromHours(hours: number | null | undefined) {
-  if (hours === null || hours === undefined || Number.isNaN(Number(hours))) {
-    return "-";
-  }
-
-  const wholeHours = Math.trunc(Number(hours));
-  let minutes = Math.round((Number(hours) % 1) * 60);
-  let displayHours = wholeHours;
-
-  if (minutes === 60) {
-    displayHours += 1;
-    minutes = 0;
-  }
-
-  const parts: string[] = [];
-  if (displayHours > 0) parts.push(`${displayHours} ${displayHours === 1 ? "hr" : "hrs"}`);
-  if (minutes > 0 || !parts.length) parts.push(`${minutes} mins`);
-
-  return parts.join(" ");
+  return formatWorkedDuration(hours);
 }
+
+export {
+  formatDecimalHours,
+  formatDurationMinutes,
+  formatTime,
+  formatWorkedDuration,
+  getHalfDayThresholdHours,
+  getOrgCurrentTimeHHMM,
+  getOrgCurrentTimeMinutes,
+  isDutyEndedForDate,
+  isOfficeHoursEnded,
+  parseTimeToMinutes,
+  todayISOInTimezone
+} from "@/lib/utils";
 
 export type AttendanceFlags = {
   isPresent: boolean;
   isLate: boolean;
   isHalfDay: boolean;
   isAbsent: boolean;
-  displayStatuses: Array<"Present" | "Late" | "Half Day" | "Absent">;
+  isPending: boolean;
+  displayStatuses: Array<"Present" | "Late" | "Half Day" | "Absent" | "Pending">;
 };
 
 export function deriveAttendanceFlags(
-  attendance: Pick<AttendanceRecord, "check_in_at" | "check_out_at" | "total_hours"> | null | undefined,
+  attendance:
+    | (Pick<AttendanceRecord, "check_in_at" | "check_out_at" | "total_hours"> & Partial<Pick<AttendanceRecord, "work_date" | "status">>)
+    | null
+    | undefined,
   settings: Pick<OrganizationSettings, "timezone" | "late_threshold_time" | "office_start_time" | "office_end_time">
 ): AttendanceFlags {
   if (!attendance?.check_in_at) {
+    const isPending = Boolean(attendance?.work_date && !isDutyEndedForDate(attendance.work_date, settings));
+    if (isPending || attendance?.status === "Pending") {
+      return {
+        isPresent: false,
+        isLate: false,
+        isHalfDay: false,
+        isAbsent: false,
+        isPending: true,
+        displayStatuses: ["Pending"]
+      };
+    }
+
     return {
       isPresent: false,
       isLate: false,
       isHalfDay: false,
       isAbsent: true,
+      isPending: false,
       displayStatuses: ["Absent"]
     };
   }
 
-  const isPresent = true;
-  const isLate = timeInZoneMinutes(attendance.check_in_at, settings.timezone) > timeValueMinutes(settings.late_threshold_time);
-  // Keep this aligned with the existing checkout RPC, which marks Half Day when worked hours are below 4.
+  const lateThreshold = parseTimeToMinutes(settings.late_threshold_time) ?? 0;
+  const isLate = timeInZoneMinutes(attendance.check_in_at, settings.timezone) > lateThreshold;
+  const halfDayThreshold = getHalfDayThresholdHours(settings);
   const isHalfDay =
     Boolean(attendance.check_out_at) &&
     attendance.total_hours !== null &&
-    Number(attendance.total_hours) < existingHalfDayThresholdHours;
-  const displayStatuses: AttendanceFlags["displayStatuses"] = ["Present"];
+    Number(attendance.total_hours) <= halfDayThreshold;
 
-  if (isLate) displayStatuses.push("Late");
-  if (isHalfDay) displayStatuses.push("Half Day");
+  const displayStatuses: AttendanceFlags["displayStatuses"] = ["Present"];
+  if (isLate) {
+    displayStatuses.push("Late");
+  }
+  if (isHalfDay) {
+    displayStatuses.push("Half Day");
+  }
 
   return {
-    isPresent,
+    isPresent: true,
     isLate,
     isHalfDay,
     isAbsent: false,
+    isPending: false,
     displayStatuses
   };
-}
-
-function timeValueMinutes(value: string) {
-  const [hours = "0", minutes = "0"] = value.split(":");
-  return Number(hours) * 60 + Number(minutes);
 }
 
 function timeInZoneMinutes(value: string, timezone: string) {
@@ -317,7 +346,8 @@ function timeInZoneMinutes(value: string, timezone: string) {
       hour12: false,
       timeZone: timezone
     }).formatToParts(new Date(value));
-    const hours = Number(parts.find((part) => part.type === "hour")?.value ?? 0);
+    let hours = Number(parts.find((part) => part.type === "hour")?.value ?? 0);
+    if (hours === 24) hours = 0;
     const minutes = Number(parts.find((part) => part.type === "minute")?.value ?? 0);
     return hours * 60 + minutes;
   } catch {

@@ -20,16 +20,18 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { getLocale, t } from "@/lib/i18n";
 import { getOrganizationSettings } from "@/lib/organization-settings";
-import { formatDate, isAdminManagerRole, todayISO } from "@/lib/utils";
+import { formatDate, isAdminManagerRole, isOfficeHoursEnded, todayISOInTimezone } from "@/lib/utils";
+
+export const dynamic = "force-dynamic";
 
 export default async function AdminDashboardPage() {
   const profile = await requireAdminProfile();
   const supabase = isAdminManagerRole(profile.role) ? createAdminClient() : await createClient();
-  const today = todayISO();
+  const settings = await getOrganizationSettings();
+  const today = todayISOInTimezone(settings.timezone);
 
   const [
     locale,
-    settings,
     employees,
     attendanceToday,
     pendingTasks,
@@ -38,9 +40,8 @@ export default async function AdminDashboardPage() {
     reportsToday
   ] = await Promise.all([
     getLocale(),
-    getOrganizationSettings(),
     supabase.from("profiles").select("id, role, status"),
-    supabase.from("attendance").select("employee_id, check_in_at, check_out_at, total_hours, status").eq("work_date", today),
+    supabase.from("attendance").select("employee_id, work_date, check_in_at, check_out_at, total_hours, status").eq("work_date", today),
     supabase.from("tasks").select("id", { count: "exact", head: true }).eq("status", "Pending"),
     supabase
       .from("tasks")
@@ -63,7 +64,12 @@ export default async function AdminDashboardPage() {
   const halfDayToday = activeAttendanceFlags.filter((flags) => flags.isHalfDay).length;
   const reportEmployees = new Set((reportsToday.data ?? []).filter((item) => activeEmployeeIds.has(item.employee_id)).map((item) => item.employee_id));
   const missingReports = Math.max(activeEmployeeCount - reportEmployees.size, 0);
-  const absentToday = activeEmployees.filter((employee) => !activeAttendanceEmployeeIds.has(employee.id)).length;
+  const officeEndedToday = isOfficeHoursEnded(settings);
+  const actualAbsentToday = activeAttendanceFlags.filter((flags) => flags.isAbsent).length;
+  const missingAbsentToday = officeEndedToday
+    ? activeEmployees.filter((employee) => !activeAttendanceEmployeeIds.has(employee.id)).length
+    : 0;
+  const absentToday = actualAbsentToday + missingAbsentToday;
 
   return (
     <>
@@ -73,7 +79,7 @@ export default async function AdminDashboardPage() {
           <p className="mt-1 max-w-3xl text-sm font-medium text-slate-500">{t("adminDashboardSubtitle", locale)}</p>
         </div>
         <div className="flex justify-start md:justify-center">
-          <LiveClock timezone={settings.timezone} />
+          <LiveClock timezone={settings.timezone} serverNow={new Date().toISOString()} />
         </div>
         <div className="flex md:justify-end">
           <OfficeTiming

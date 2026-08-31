@@ -11,8 +11,8 @@ import { departmentTextForProfile, fetchEmployeeDepartmentsByEmployee } from "@/
 import { getOrganizationSettings } from "@/lib/organization-settings";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
-import type { AttendanceRecord, Profile } from "@/lib/types";
-import { formatDate, formatDateTime, isAdminManagerRole, todayISO } from "@/lib/utils";
+import type { AttendanceRecord, AttendanceStatus, Profile } from "@/lib/types";
+import { formatDate, formatDateTime, formatTime, formatWorkedDuration, getOrgCurrentTimeHHMM, isAdminManagerRole, isDutyEndedForDate, todayISOInTimezone } from "@/lib/utils";
 
 type Props = {
   searchParams?: Promise<{
@@ -47,12 +47,15 @@ function subtractDaysISO(isoDate: string, days: number): string {
   return `${y}-${m}-${d}`;
 }
 
+export const dynamic = "force-dynamic";
+
 export default async function AdminAttendancePage({ searchParams }: Props) {
   const resolvedSearchParams = await searchParams;
   const currentProfile = await requireAdminProfile();
   const canCorrectAttendance = isAdminManagerRole(currentProfile.role);
   const supabase = canCorrectAttendance ? createAdminClient() : await createClient();
-  const today = todayISO();
+  const settings = await getOrganizationSettings();
+  const today = todayISOInTimezone(settings.timezone);
   const statusFilter = normalizeAttendanceFilter(resolvedSearchParams?.status);
   const employeeFilter = resolvedSearchParams?.employee || "";
   const dateParamProvided = Boolean(resolvedSearchParams?.date);
@@ -70,8 +73,7 @@ export default async function AdminAttendancePage({ searchParams }: Props) {
       })()
     : getRecentAttendanceForAll(today, "admin-attendance", employeeFilter || undefined);
 
-  const [settings, { data: profiles }, rawAttendanceResult] = await Promise.all([
-    getOrganizationSettings(),
+  const [{ data: profiles }, rawAttendanceResult] = await Promise.all([
     supabase
       .from("profiles")
       .select("*")
@@ -85,25 +87,10 @@ export default async function AdminAttendancePage({ searchParams }: Props) {
   const profilesById = new Map(employees.map((employee) => [employee.id, employee]));
 
   // Compute org-local current time (HH:MM) for checkout constraint
-  const currentOrgTimeHHMM = (() => {
-    try {
-      const parts = new Intl.DateTimeFormat("en-GB", {
-        hour: "2-digit",
-        minute: "2-digit",
-        hour12: false,
-        timeZone: settings.timezone
-      }).formatToParts(new Date());
-      const hour = parts.find((p) => p.type === "hour")?.value ?? "";
-      const minute = parts.find((p) => p.type === "minute")?.value ?? "";
-      return hour && minute ? `${hour}:${minute}` : "";
-    } catch {
-      return "";
-    }
-  })();
+  const currentOrgTimeHHMM = getOrgCurrentTimeHHMM(settings.timezone);
 
   // Strip seconds from "09:00:00" → "09:00"
   const dutyStartHHMM = settings.office_start_time?.slice(0, 5) ?? "";
-
 
   // Decide whether to show recent history or a specific date
   let attendanceRows: AttendanceRecord[] = [];
@@ -129,28 +116,30 @@ export default async function AdminAttendancePage({ searchParams }: Props) {
 
     attendanceRows = attachProfilesToAttendanceRows((data ?? []) as AttendanceRecord[], profilesById);
 
-    // For specific date, add synthetic absent records for employees not present
-    const presentIds = new Set(attendanceRows.map((r) => r.employee_id));
-    const absentEmployees = employees.filter((emp) => !presentIds.has(emp.id));
-    for (const employee of absentEmployees) {
-      attendanceRows.push({
-        id: `synthetic-absent-${employee.id}-${selectedDate}`,
-        employee_id: employee.id,
-        work_date: selectedDate,
-        check_in_at: null,
-        check_out_at: null,
-        total_hours: null,
-        status: "Absent",
-        created_at: new Date().toISOString(),
-        profiles: {
-          id: employee.id,
-          full_name: employee.full_name,
-          email: employee.email,
-          department: employee.department,
-          department_id: employee.department_id,
-          designation: employee.designation
-        }
-      });
+    // For specific date, add synthetic absent records for employees not present ONLY if duty has ended
+    if (isDutyEndedForDate(selectedDate, settings)) {
+      const presentIds = new Set(attendanceRows.map((r) => r.employee_id));
+      const absentEmployees = employees.filter((emp) => !presentIds.has(emp.id));
+      for (const employee of absentEmployees) {
+        attendanceRows.push({
+          id: `synthetic-absent-${employee.id}-${selectedDate}`,
+          employee_id: employee.id,
+          work_date: selectedDate,
+          check_in_at: null,
+          check_out_at: null,
+          total_hours: null,
+          status: "Absent",
+          created_at: new Date().toISOString(),
+          profiles: {
+            id: employee.id,
+            full_name: employee.full_name,
+            email: employee.email,
+            department: employee.department,
+            department_id: employee.department_id,
+            designation: employee.designation
+          }
+        });
+      }
     }
 
     // Sort by date descending
@@ -178,7 +167,7 @@ export default async function AdminAttendancePage({ searchParams }: Props) {
     for (const employee of employees) {
       if (employeeFilter && employee.id !== employeeFilter) continue;
       const employeeRecords = recordsByEmployee.get(employee.id) ?? [];
-      const timeline = buildCompleteTimelineWithAbsent(employeeRecords, employee, startDate, today);
+      const timeline = buildCompleteTimelineWithAbsent(employeeRecords, employee, startDate, today, settings);
       allRecords.push(...timeline);
     }
 
@@ -214,9 +203,7 @@ export default async function AdminAttendancePage({ searchParams }: Props) {
   const filteredAttendance =
     statusFilter === "all"
       ? selectedAttendance
-      : statusFilter === "absent"
-        ? selectedAttendance.filter((record) => record.status === "Absent")
-        : selectedAttendance.filter((record) => attendanceMatchesFilter(attendanceFlagsByRecordId.get(record.id), statusFilter));
+      : selectedAttendance.filter((record) => attendanceMatchesFilter(attendanceFlagsByRecordId.get(record.id), statusFilter));
 
   return (
     <>
@@ -313,18 +300,18 @@ export default async function AdminAttendancePage({ searchParams }: Props) {
                     </div>
                     <div>
                       <p className="font-medium text-slate-700">Check in</p>
-                      <p>{formatDateTime(record.check_in_at)}</p>
+                      <p>{formatTime(record.check_in_at, settings.timezone)}</p>
                     </div>
                     <div>
                       <p className="font-medium text-slate-700">Check out</p>
-                      <p>{formatDateTime(record.check_out_at)}</p>
+                      <p>{formatTime(record.check_out_at, settings.timezone)}</p>
                     </div>
                     <div>
                       <p className="font-medium text-slate-700">Total hours</p>
-                      <p>{formatDurationFromHours(record.total_hours)}</p>
+                      <p>{formatWorkedDuration(record.total_hours)}</p>
                     </div>
                   </dl>
-                  {canCorrectAttendance ? (
+                   {canCorrectAttendance ? (
                     <details className="mt-3 border-t border-slate-100 pt-3">
                       <summary className="cursor-pointer text-sm font-extrabold text-bie-700">Correct attendance</summary>
                       <form action={correctAttendance} className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
@@ -342,6 +329,7 @@ export default async function AdminAttendancePage({ searchParams }: Props) {
                           dutyStartTime={dutyStartHHMM}
                           todayDate={today}
                           timezone={settings.timezone}
+                          serverNow={new Date().toISOString()}
                           initialCurrentOrgTime={currentOrgTimeHHMM}
                         />
                         <label className="grid gap-1 text-sm font-bold text-slate-700">
@@ -401,6 +389,7 @@ function attendanceMatchesFilter(flags: ReturnType<typeof deriveAttendanceFlags>
   if (status === "present") return flags.isPresent;
   if (status === "late") return flags.isLate;
   if (status === "half-day") return flags.isHalfDay;
+  if (status === "absent") return flags.isAbsent;
   return false;
 }
 

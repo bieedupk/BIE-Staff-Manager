@@ -3,7 +3,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { requireAdminManagerProfile } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { AuditLog } from "@/lib/types";
-import { formatDateTime } from "@/lib/utils";
+import { formatDateTime, formatWorkedDuration } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -90,8 +90,8 @@ export default async function AdminAuditLogsPage() {
                         {attendanceRows.map((row) => (
                           <div key={row.field} className="grid grid-cols-[1.2fr_1fr_1fr] border-b border-slate-100 px-3 py-2 text-sm text-slate-700 last:border-b-0">
                             <span className="font-semibold">{row.label}</span>
-                            <span>{formatAuditValue(row.oldValue)}</span>
-                            <span>{formatAuditValue(row.newValue)}</span>
+                            <span>{formatAuditValue(row.oldValue, row.field)}</span>
+                            <span>{formatAuditValue(row.newValue, row.field)}</span>
                           </div>
                         ))}
                       </div>
@@ -257,8 +257,11 @@ function normalizeAuditValue(value: unknown) {
   return String(value);
 }
 
-function formatAuditValue(value: unknown) {
+function formatAuditValue(value: unknown, field?: string) {
   if (value === null || value === undefined || value === "") return "-";
+  if (field === "total_hours") {
+    return formatWorkedDuration(value as number | string);
+  }
   if (typeof value === "string") {
     const trimmed = value.trim();
     if (!trimmed) return "-";

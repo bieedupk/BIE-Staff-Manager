@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { formatDurationMinutes, getOrgCurrentTimeHHMM } from "@/lib/utils";
 
 type Props = {
   initialCheckInTime: string;
@@ -11,6 +12,8 @@ type Props = {
   todayDate: string;
   /** IANA timezone string for the organization (e.g. "Asia/Karachi") */
   timezone: string;
+  /** Server timestamp at render for monotonic client time progression */
+  serverNow?: string | number;
   /** Optional initial "HH:MM" computed during server render */
   initialCurrentOrgTime?: string;
   /** "YYYY-MM-DD" — the work_date of the record being corrected */
@@ -23,25 +26,35 @@ export function AttendanceCorrectionHours({
   dutyStartTime,
   todayDate,
   timezone,
+  serverNow,
   initialCurrentOrgTime,
   initialCorrectionDate
 }: Props) {
+  const serverStartMs = useRef<number | null>(null);
+  const mountPerfMs = useRef<number | null>(null);
   const [correctionDate, setCorrectionDate] = useState(initialCorrectionDate);
   const [checkInTime, setCheckInTime] = useState(initialCheckInTime);
   const [checkOutTime, setCheckOutTime] = useState(initialCheckOutTime);
-  const [currentOrgTime, setCurrentOrgTime] = useState(
-    initialCurrentOrgTime || (timezone ? getOrgLocalTimeHHMM(timezone) : "")
-  );
+  const [currentOrgTime, setCurrentOrgTime] = useState(initialCurrentOrgTime ?? "");
 
   const checkInRef = useRef<HTMLInputElement>(null);
   const checkOutRef = useRef<HTMLInputElement>(null);
 
-  // Maintain live organization-local time so long-open pages track current time automatically
+  // Maintain live organization-local time so long-open pages track current time automatically via monotonic elapsed time
   useEffect(() => {
+    serverStartMs.current =
+      typeof serverNow === "number" ? serverNow : serverNow ? new Date(serverNow).getTime() : Date.now();
+    mountPerfMs.current = typeof performance !== "undefined" ? performance.now() : Date.now();
+
     if (!timezone) return;
 
     const updateTime = () => {
-      const liveTime = getOrgLocalTimeHHMM(timezone);
+      const baseMs = serverStartMs.current ?? Date.now();
+      const mountMs = mountPerfMs.current ?? (typeof performance !== "undefined" ? performance.now() : Date.now());
+      const currentPerf = typeof performance !== "undefined" ? performance.now() : Date.now();
+      const elapsed = currentPerf - mountMs;
+      const monotonicDate = new Date(baseMs + elapsed);
+      const liveTime = getOrgCurrentTimeHHMM(timezone, monotonicDate);
       if (liveTime) {
         setCurrentOrgTime(liveTime);
       }
@@ -50,9 +63,9 @@ export function AttendanceCorrectionHours({
     updateTime();
     const interval = setInterval(updateTime, 30_000);
     return () => clearInterval(interval);
-  }, [timezone]);
+  }, [timezone, serverNow]);
 
-  // Clear any stale custom validity whenever the live clock updates
+  // Clear any stale custom validity whenever the live clock or correction date updates
   useEffect(() => {
     if (checkInRef.current && checkInRef.current.validationMessage) {
       checkInRef.current.setCustomValidity("");
@@ -60,60 +73,59 @@ export function AttendanceCorrectionHours({
     if (checkOutRef.current && checkOutRef.current.validationMessage) {
       checkOutRef.current.setCustomValidity("");
     }
-  }, [currentOrgTime]);
+  }, [currentOrgTime, correctionDate]);
 
   const isToday = correctionDate === todayDate;
 
-  // When today is selected, check-in is valid only within [dutyStartTime, currentOrgTime].
-  // If the current org time is before duty start (e.g. 07:00 with duty at 08:30),
-  // no check-in is possible yet — we disable the field rather than set min > max.
+  // Check-in rule (same for today and historical): checkInTime >= dutyStartTime
   const checkInMin = dutyStartTime || undefined;
-  const checkInMax = isToday ? currentOrgTime : undefined;
 
-  // Edge case: today but current time is before duty start → no valid window yet
-  const checkInDisabledToday =
-    isToday &&
-    Boolean(currentOrgTime) &&
-    Boolean(dutyStartTime) &&
-    currentOrgTime < dutyStartTime;
+  // Check-out: if today → max = current org time; for past dates → no current-time max
+  const checkOutMax = isToday && currentOrgTime ? currentOrgTime : undefined;
 
-  // check-out: if today → max = current org time; otherwise unrestricted
-  const checkOutMax = isToday ? currentOrgTime : undefined;
+  const calculatedDuration = useMemo(() => {
+    if (!checkInTime || !checkOutTime) {
+      return { decimalHours: "", displayDuration: "" };
+    }
 
-  // check-out: min = check-in time when set
-  const checkOutMin = checkInTime || undefined;
+    const [inH, inM] = checkInTime.split(":").map(Number);
+    const [outH, outM] = checkOutTime.split(":").map(Number);
+    const inMins = inH * 60 + inM;
+    const outMins = outH * 60 + outM;
+    let diff = outMins - inMins;
 
-  const totalHoursValue = useMemo(() => calculateTotalHours(checkInTime, checkOutTime), [checkInTime, checkOutTime]);
+    if (diff < 0) {
+      diff += 24 * 60;
+    }
+
+    const decimalHours = String(Number((diff / 60).toFixed(2)));
+    const displayDuration = formatDurationMinutes(diff);
+    return { decimalHours, displayDuration };
+  }, [checkInTime, checkOutTime]);
 
   function handleDateChange(event: React.ChangeEvent<HTMLInputElement>) {
     const newDate = event.target.value;
     setCorrectionDate(newDate);
-    // Switching to today: clear check-in if it now exceeds current org time
-    if (newDate === todayDate && currentOrgTime) {
-      if (checkInTime && checkInTime > currentOrgTime) {
-        setCheckInTime("");
-      }
-      if (checkOutTime && checkOutTime > currentOrgTime) {
-        setCheckOutTime("");
-      }
+
+    // Immediately clear any existing validation errors when date changes
+    if (checkInRef.current) checkInRef.current.setCustomValidity("");
+    if (checkOutRef.current) checkOutRef.current.setCustomValidity("");
+
+    // Switching to today: clear check-out if it exceeds current org time
+    if (newDate === todayDate && currentOrgTime && checkOutTime && checkOutTime > currentOrgTime) {
+      setCheckOutTime("");
     }
   }
 
   function handleCheckInChange(event: React.ChangeEvent<HTMLInputElement>) {
     event.currentTarget.setCustomValidity("");
-    const newCheckIn = event.target.value;
-    setCheckInTime(newCheckIn);
-    if (checkOutTime && newCheckIn && checkOutTime < newCheckIn) {
-      setCheckOutTime("");
-    }
+    setCheckInTime(event.target.value);
   }
 
   function handleCheckInInvalid(event: React.InvalidEvent<HTMLInputElement>) {
     const input = event.currentTarget;
-    if (input.validity.rangeOverflow) {
-      input.setCustomValidity("Enter the current time or an earlier time.");
-    } else if (input.validity.rangeUnderflow) {
-      input.setCustomValidity("Please select the duty start time or a later time.");
+    if (input.validity.rangeUnderflow) {
+      input.setCustomValidity("Check-in time cannot be earlier than the duty start time.");
     } else {
       input.setCustomValidity("");
     }
@@ -130,10 +142,8 @@ export function AttendanceCorrectionHours({
 
   function handleCheckOutInvalid(event: React.InvalidEvent<HTMLInputElement>) {
     const input = event.currentTarget;
-    if (input.validity.rangeOverflow) {
+    if (isToday && input.validity.rangeOverflow) {
       input.setCustomValidity("Enter the current time or an earlier time.");
-    } else if (input.validity.rangeUnderflow) {
-      input.setCustomValidity("Please select the current time or an earlier time.");
     } else {
       input.setCustomValidity("");
     }
@@ -159,30 +169,17 @@ export function AttendanceCorrectionHours({
       </label>
       <label className="grid gap-1 text-sm font-bold text-slate-700">
         Check in time
-        {checkInDisabledToday ? (
-          <input
-            name="check_in_time"
-            type="time"
-            value=""
-            disabled
-            title={dutyStartTime ? `Cannot correct check-in before duty start (${dutyStartTime})` : "Cannot correct check-in before duty start"}
-            aria-label="Check in time (disabled before duty start)"
-            className="min-h-11 rounded-lg border border-slate-300 px-3 bg-slate-100 text-slate-400 cursor-not-allowed"
-          />
-        ) : (
-          <input
-            ref={checkInRef}
-            name="check_in_time"
-            type="time"
-            value={checkInTime}
-            min={checkInMin}
-            max={checkInMax}
-            onChange={handleCheckInChange}
-            onInput={handleCheckInInput}
-            onInvalid={handleCheckInInvalid}
-            className="min-h-11 rounded-lg border border-slate-300 px-3"
-          />
-        )}
+        <input
+          ref={checkInRef}
+          name="check_in_time"
+          type="time"
+          value={checkInTime}
+          min={checkInMin}
+          onChange={handleCheckInChange}
+          onInput={handleCheckInInput}
+          onInvalid={handleCheckInInvalid}
+          className="min-h-11 rounded-lg border border-slate-300 px-3"
+        />
       </label>
       <label className="grid gap-1 text-sm font-bold text-slate-700">
         Check out time
@@ -191,7 +188,6 @@ export function AttendanceCorrectionHours({
           name="check_out_time"
           type="time"
           value={checkOutTime}
-          min={checkOutMin}
           max={checkOutMax}
           onChange={handleCheckOutChange}
           onInput={handleCheckOutInput}
@@ -201,52 +197,14 @@ export function AttendanceCorrectionHours({
       </label>
       <label className="grid gap-1 text-sm font-bold text-slate-700">
         Total hours
+        <input type="hidden" name="total_hours" value={calculatedDuration.decimalHours} />
         <input
-          name="total_hours"
-          type="number"
-          min="0"
-          step="0.01"
+          type="text"
           readOnly
-          value={totalHoursValue}
-          className="min-h-11 rounded-lg border border-slate-300 px-3 bg-slate-50"
+          value={calculatedDuration.displayDuration}
+          className="min-h-11 rounded-lg border border-slate-300 px-3 bg-slate-50 text-slate-800"
         />
       </label>
     </>
   );
-}
-
-function getOrgLocalTimeHHMM(timezone: string): string {
-  try {
-    const parts = new Intl.DateTimeFormat("en-GB", {
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: false,
-      timeZone: timezone
-    }).formatToParts(new Date());
-    const hour = parts.find((p) => p.type === "hour")?.value ?? "";
-    const minute = parts.find((p) => p.type === "minute")?.value ?? "";
-    return hour && minute ? `${hour}:${minute}` : "";
-  } catch {
-    const d = new Date();
-    return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
-  }
-}
-
-function calculateTotalHours(checkInTime: string, checkOutTime: string) {
-  if (!checkInTime || !checkOutTime) return "";
-
-  const parseTime = (value: string) => {
-    const [hours, minutes] = value.split(":").map(Number);
-    return hours * 60 + minutes;
-  };
-
-  const checkInMinutes = parseTime(checkInTime);
-  const checkOutMinutes = parseTime(checkOutTime);
-  let differenceMinutes = checkOutMinutes - checkInMinutes;
-
-  if (differenceMinutes < 0) {
-    differenceMinutes += 24 * 60;
-  }
-
-  return (differenceMinutes / 60).toFixed(2);
 }

@@ -1,4 +1,4 @@
-import type { AttendanceStatus, EmployeeStatus, LeaveStatus, TaskPriority, TaskStatus, UserRole } from "@/lib/types";
+import type { AttendanceStatus, EmployeeStatus, LeaveStatus, OrganizationSettings, TaskPriority, TaskStatus, UserRole } from "@/lib/types";
 
 export const adminRoles: UserRole[] = ["super_admin", "admin", "supervisor"];
 
@@ -30,6 +30,27 @@ export function formatDateTime(value?: string | null) {
   }).format(new Date(value));
 }
 
+export function formatTime(value?: string | null, timezone: string = "Asia/Karachi") {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "-";
+  try {
+    return new Intl.DateTimeFormat("en-US", {
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+      timeZone: timezone || "Asia/Karachi"
+    }).format(date);
+  } catch {
+    return new Intl.DateTimeFormat("en-US", {
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+      timeZone: "Asia/Karachi"
+    }).format(date);
+  }
+}
+
 function karachiDateParts(value: Date) {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Karachi",
@@ -52,10 +73,179 @@ export function todayISO() {
   return `${year}-${month}-${day}`;
 }
 
+export function todayISOInTimezone(timezone?: string, date = new Date()): string {
+  if (!timezone) return todayISO();
+  try {
+    const parts = new Intl.DateTimeFormat("en-CA", {
+      timeZone: timezone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit"
+    }).formatToParts(date);
+    const y = parts.find((p) => p.type === "year")?.value ?? "";
+    const m = parts.find((p) => p.type === "month")?.value ?? "";
+    const d = parts.find((p) => p.type === "day")?.value ?? "";
+    return y && m && d ? `${y}-${m}-${d}` : todayISO();
+  } catch {
+    return todayISO();
+  }
+}
+
+export function parseTimeToMinutes(timeStr: string | null | undefined): number | null {
+  if (!timeStr) return null;
+  const trimmed = timeStr.trim();
+  if (!trimmed) return null;
+
+  const match12 = trimmed.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)?$/i);
+  if (match12) {
+    let hours = parseInt(match12[1], 10);
+    const minutes = parseInt(match12[2], 10);
+    const meridiem = match12[4]?.toUpperCase();
+    if (meridiem === "PM" && hours < 12) hours += 12;
+    if (meridiem === "AM" && hours === 12) hours = 0;
+    return hours * 60 + minutes;
+  }
+
+  const [h, m] = trimmed.split(":");
+  const hours = parseInt(h, 10);
+  const minutes = parseInt(m, 10);
+  if (Number.isNaN(hours) || Number.isNaN(minutes)) return null;
+  return hours * 60 + minutes;
+}
+
+export function getOrgCurrentTimeMinutes(timezone?: string, date = new Date()): number {
+  const tz = timezone || "Asia/Karachi";
+  try {
+    const parts = new Intl.DateTimeFormat("en-GB", {
+      timeZone: tz,
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false
+    }).formatToParts(date);
+    const hourStr = parts.find((p) => p.type === "hour")?.value ?? "0";
+    const minuteStr = parts.find((p) => p.type === "minute")?.value ?? "0";
+    let hour = parseInt(hourStr, 10);
+    if (hour === 24) hour = 0;
+    const minute = parseInt(minuteStr, 10);
+    return hour * 60 + minute;
+  } catch {
+    return date.getHours() * 60 + date.getMinutes();
+  }
+}
+
+export function getOrgCurrentTimeHHMM(timezone?: string, date = new Date()): string {
+  const totalMinutes = getOrgCurrentTimeMinutes(timezone, date);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+}
+
+export function isOfficeHoursEnded(
+  settings: Pick<OrganizationSettings, "office_end_time" | "timezone">,
+  date = new Date()
+): boolean {
+  const currentMinutes = getOrgCurrentTimeMinutes(settings?.timezone, date);
+  const officeEndMinutes = parseTimeToMinutes(settings?.office_end_time);
+  if (officeEndMinutes === null) return true;
+  return currentMinutes >= officeEndMinutes;
+}
+
+export function isDutyEndedForDate(
+  workDate: string,
+  settings: Pick<OrganizationSettings, "office_end_time" | "timezone">,
+  now = new Date()
+): boolean {
+  const orgToday = todayISOInTimezone(settings?.timezone, now);
+  if (workDate < orgToday) {
+    return true;
+  }
+  if (workDate > orgToday) {
+    return false;
+  }
+  return isOfficeHoursEnded(settings, now);
+}
+
+export function getHalfDayThresholdHours(
+  settings?: Pick<OrganizationSettings, "office_start_time" | "office_end_time">
+): number {
+  if (!settings?.office_start_time || !settings?.office_end_time) {
+    return 4.0;
+  }
+  const startMins = parseTimeToMinutes(settings.office_start_time);
+  const endMins = parseTimeToMinutes(settings.office_end_time);
+  if (startMins === null || endMins === null || endMins <= startMins) {
+    return 4.0;
+  }
+  const dutyDurationHours = (endMins - startMins) / 60;
+  return dutyDurationHours / 2;
+}
+
 export function monthStartISO() {
   const { year, month } = karachiDateParts(new Date());
   return `${year}-${month}-01`;
 }
+
+
+export function formatDurationMinutes(totalMinutes: number | null | undefined): string {
+  if (totalMinutes === null || totalMinutes === undefined || Number.isNaN(Number(totalMinutes))) {
+    return "-";
+  }
+
+  const mins = Math.max(Math.round(Number(totalMinutes)), 0);
+  const hours = Math.floor(mins / 60);
+  const minutes = mins % 60;
+
+  if (hours === 0) {
+    return `${minutes} ${minutes === 1 ? "minute" : "minutes"}`;
+  }
+
+  const hourPart = `${hours} ${hours === 1 ? "hour" : "hours"}`;
+
+  if (minutes === 0) {
+    return hourPart;
+  }
+
+  const minutePart = `${minutes} ${minutes === 1 ? "minute" : "minutes"}`;
+  return `${hourPart} ${minutePart}`;
+}
+
+export function formatWorkedDuration(hours: number | string | null | undefined): string {
+  if (hours === null || hours === undefined || hours === "") {
+    return "-";
+  }
+
+  const num = typeof hours === "number" ? hours : Number(hours);
+  if (Number.isNaN(num)) {
+    return "-";
+  }
+
+  return formatDurationMinutes(Math.round(num * 60));
+}
+
+export function formatDecimalHours(
+  value: number | string | null | undefined,
+  options?: { withUnit?: boolean }
+): string {
+  if (value === null || value === undefined || value === "") {
+    return options?.withUnit === false ? "" : "-";
+  }
+
+  const num = typeof value === "number" ? value : Number(value);
+  if (Number.isNaN(num)) {
+    return options?.withUnit === false ? "" : "-";
+  }
+
+  const rounded = Math.round(num * 100) / 100;
+  const formattedNumber = String(Number(rounded.toFixed(2)));
+
+  if (options?.withUnit === false) {
+    return formattedNumber;
+  }
+
+  const unit = rounded === 1 ? "hour" : "hours";
+  return `${formattedNumber} ${unit}`;
+}
+
 
 export function hoursBetween(start: string, end = new Date()) {
   const diff = end.getTime() - new Date(start).getTime();

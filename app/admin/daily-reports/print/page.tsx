@@ -6,7 +6,7 @@ import { departmentTextForProfile, fetchEmployeeDepartmentsByEmployee } from "@/
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import type { AttendanceRecord, DailyReport } from "@/lib/types";
-import { formatDate, formatDateTime, isAdminManagerRole, todayISO } from "@/lib/utils";
+import { formatDate, formatDateTime, formatTime, formatWorkedDuration, isAdminManagerRole, todayISO } from "@/lib/utils";
 
 type Props = {
   searchParams?: Promise<{
@@ -80,9 +80,9 @@ export default async function DailyReportsPrintPage({ searchParams }: Props) {
                   </p>
                 </div>
                 <div className="report-hours">
-                  <p>Attendance hours: {report.hours_worked}</p>
-                  <p>Check in: {formatDateTime(attendanceByEmployee.get(report.employee_id)?.check_in_at)}</p>
-                  <p>Check out: {formatDateTime(attendanceByEmployee.get(report.employee_id)?.check_out_at)}</p>
+                  <p>Attendance hours: {formatWorkedDuration(report.hours_worked)}</p>
+                  <p>Check in: {formatTime(attendanceByEmployee.get(report.employee_id)?.check_in_at)}</p>
+                  <p>Check out: {formatTime(attendanceByEmployee.get(report.employee_id)?.check_out_at)}</p>
                 </div>
               </div>
               <div className="report-grid">

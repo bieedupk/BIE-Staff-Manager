@@ -13,6 +13,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { getOrganizationSettings } from "@/lib/organization-settings";
 import type { Profile } from "@/lib/types";
+import { getHalfDayThresholdHours, getOrgCurrentTimeMinutes, isDutyEndedForDate, parseTimeToMinutes, todayISOInTimezone } from "@/lib/utils";
 
 function attendanceRedirectPath(formData: FormData) {
   const sourcePath = String(formData.get("source_path") || "");
@@ -84,6 +85,16 @@ function nullableFormString(formData: FormData, key: string) {
 function nullableFormNumber(formData: FormData, key: string) {
   const value = String(formData.get(key) ?? "").trim();
   return value ? Number(value) : null;
+}
+
+function addDaysISO(isoDate: string, days: number): string {
+  const [year, month, day] = isoDate.split("-").map(Number);
+  const date = new Date(year, month - 1, day);
+  date.setDate(date.getDate() + days);
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
 }
 
 function buildTimestampFromDateAndTime(date: string, time: string | null, timezone: string) {
@@ -196,6 +207,28 @@ export async function checkOut(formData: FormData) {
 
     if (error) throw new Error(error.message);
 
+    // Re-evaluate Half Day status based on organization-configured duty schedule
+    const settings = await getOrganizationSettings();
+    const halfDayThreshold = getHalfDayThresholdHours(settings);
+    const orgToday = todayISOInTimezone(settings.timezone);
+
+    const { data: updatedRecord } = await supabase
+      .from("attendance")
+      .select("id, total_hours, status")
+      .eq("employee_id", profile.id)
+      .eq("work_date", orgToday)
+      .maybeSingle();
+
+    if (updatedRecord && updatedRecord.total_hours !== null) {
+      const workedHours = Number(updatedRecord.total_hours);
+      if (workedHours <= halfDayThreshold && updatedRecord.status !== "Half Day") {
+        await supabase
+          .from("attendance")
+          .update({ status: "Half Day" })
+          .eq("id", updatedRecord.id);
+      }
+    }
+
     await logAudit("attendance check out", "attendance", null, { employee_id: profile.id }, { actorId: profile.id });
   } catch (error) {
     type = "error";
@@ -233,31 +266,17 @@ export async function correctAttendance(formData: FormData) {
   // ── Business rule validation ─────────────────────────────────────────────────
 
   // 1. Future date check: correctionDate must not be later than today in org timezone
-  const orgTodayISO = (() => {
-    try {
-      const parts = new Intl.DateTimeFormat("en-CA", {
-        timeZone: settings.timezone,
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit"
-      }).formatToParts(new Date());
-      const y = parts.find((p) => p.type === "year")?.value ?? "";
-      const m = parts.find((p) => p.type === "month")?.value ?? "";
-      const d = parts.find((p) => p.type === "day")?.value ?? "";
-      return `${y}-${m}-${d}`;
-    } catch {
-      return new Date().toISOString().slice(0, 10);
-    }
-  })();
+  const orgTodayISO = todayISOInTimezone(settings.timezone);
 
   if (correctionDate > orgTodayISO) {
     redirectWithAttendanceCorrectionMessage(returnPath, "error", "Attendance cannot be recorded for a future date.");
   }
 
-  // 2. Check-in must not be earlier than configured duty start time
+  // 2. Check-in must not be earlier than configured duty start time (applies to today and past dates)
   if (checkInTime) {
-    const dutyStartHHMM = settings.office_start_time?.slice(0, 5) ?? "";
-    if (dutyStartHHMM && checkInTime < dutyStartHHMM) {
+    const dutyStartMinutes = parseTimeToMinutes(settings.office_start_time);
+    const checkInMinutes = parseTimeToMinutes(checkInTime);
+    if (dutyStartMinutes !== null && checkInMinutes !== null && checkInMinutes < dutyStartMinutes) {
       redirectWithAttendanceCorrectionMessage(
         returnPath,
         "error",
@@ -266,40 +285,19 @@ export async function correctAttendance(formData: FormData) {
     }
   }
 
-  // Resolve current org-local time once — shared by rules 2b and 3
-  const currentOrgTimeHHMM = (() => {
-    try {
-      const parts = new Intl.DateTimeFormat("en-GB", {
-        hour: "2-digit",
-        minute: "2-digit",
-        hour12: false,
-        timeZone: settings.timezone
-      }).formatToParts(new Date());
-      const hour = parts.find((p) => p.type === "hour")?.value ?? "";
-      const minute = parts.find((p) => p.type === "minute")?.value ?? "";
-      return hour && minute ? `${hour}:${minute}` : "";
-    } catch {
-      return "";
-    }
-  })();
-
-  // 2b. If correction date is today: check-in must not be later than current org-local time
-  if (checkInTime && correctionDate === orgTodayISO) {
-    if (currentOrgTimeHHMM && checkInTime > currentOrgTimeHHMM) {
-      redirectWithAttendanceCorrectionMessage(returnPath, "error", "Check-in time cannot be later than the current time.");
-    }
-  }
+  const isOvernight = Boolean(checkInTime && checkOutTime && checkOutTime < checkInTime);
+  const checkOutDate = isOvernight ? addDaysISO(correctionDate, 1) : correctionDate;
 
   // 3. If correction date is today: check-out must not be later than current org-local time
   if (checkOutTime && correctionDate === orgTodayISO) {
-    if (currentOrgTimeHHMM && checkOutTime > currentOrgTimeHHMM) {
+    const currentOrgMinutes = getOrgCurrentTimeMinutes(settings.timezone);
+    const checkOutMinutes = parseTimeToMinutes(checkOutTime);
+
+    // On today, an overnight checkout (which advances to tomorrow) is in the future.
+    // Also, same-day checkout cannot exceed current time.
+    if (isOvernight || (checkOutMinutes !== null && checkOutMinutes > currentOrgMinutes)) {
       redirectWithAttendanceCorrectionMessage(returnPath, "error", "Check-out time cannot be later than the current time.");
     }
-  }
-
-  // 4. Check-out must not precede check-in
-  if (checkInTime && checkOutTime && checkOutTime < checkInTime) {
-    redirectWithAttendanceCorrectionMessage(returnPath, "error", "Check-out time cannot be earlier than check-in time.");
   }
 
   // ── End business rule validation ─────────────────────────────────────────────
@@ -308,7 +306,7 @@ export async function correctAttendance(formData: FormData) {
   const status = String(formData.get("status") || "Present");
 
   const checkInAt = buildTimestampFromDateAndTime(correctionDate, checkInTime, settings.timezone);
-  const checkOutAt = buildTimestampFromDateAndTime(correctionDate, checkOutTime, settings.timezone);
+  const checkOutAt = buildTimestampFromDateAndTime(checkOutDate, checkOutTime, settings.timezone);
 
   if (isSyntheticAbsent) {
     // Handle synthetic absent row correction
@@ -366,6 +364,14 @@ export async function correctAttendance(formData: FormData) {
 
       await logAudit("attendance_corrected", "attendance", existingByDate.id, auditDetails, { actorId: currentProfile.id });
     } else {
+      if (!isDutyEndedForDate(correctionDate, settings)) {
+        redirectWithAttendanceCorrectionMessage(
+          returnPath,
+          "error",
+          "Attendance correction for a missing record is available after duty hours end."
+        );
+      }
+
       // Insert new attendance record from synthetic absent correction
       const { data: insertedAttendance, error: insertError } = await supabase
         .from("attendance")

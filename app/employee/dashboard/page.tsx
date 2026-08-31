@@ -12,12 +12,13 @@ import { checkIn, checkOut } from "@/app/actions/attendance";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatCard } from "@/components/ui/stat-card";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { attendanceDisplayStatus, getTodayAttendanceForEmployee } from "@/lib/attendance";
+import { attendanceDisplayStatus, deriveAttendanceFlags, getTodayAttendanceForEmployee } from "@/lib/attendance";
 import { requireEmployeeProfile } from "@/lib/auth";
 import { getLocale, t } from "@/lib/i18n";
+import { getOrganizationSettings } from "@/lib/organization-settings";
 import { createClient } from "@/lib/supabase/server";
 import type { DailyReport, Task } from "@/lib/types";
-import { formatDate, formatDateTime, todayISO } from "@/lib/utils";
+import { formatDate, formatTime, formatWorkedDuration, todayISOInTimezone } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -31,7 +32,8 @@ export default async function EmployeeDashboardPage({
   }>;
 }) {
   const profile = await requireEmployeeProfile();
-  const today = todayISO();
+  const settings = await getOrganizationSettings();
+  const today = todayISOInTimezone(settings.timezone);
   const supabase = await createClient();
 
   const [locale, resolvedSearchParams, todayAttendance, { data: tasks }, { data: report }] = await Promise.all([
@@ -73,20 +75,30 @@ export default async function EmployeeDashboardPage({
               <h2 className="font-extrabold text-slate-950">Today Attendance</h2>
               <p className="text-sm font-medium text-slate-500">Check in once and check out when work ends.</p>
             </div>
-            <StatusBadge tone="attendance">{attendanceStatus}</StatusBadge>
+            <div className="flex flex-wrap items-center gap-2">
+              {todayAttendance ? (
+                deriveAttendanceFlags(todayAttendance, settings).displayStatuses.map((status) => (
+                  <StatusBadge key={status} tone="attendance">
+                    {status}
+                  </StatusBadge>
+                ))
+              ) : (
+                <StatusBadge tone="attendance">{attendanceStatus}</StatusBadge>
+              )}
+            </div>
           </div>
           <div className="mt-4 grid gap-2 text-sm text-slate-600 grid-cols-1 sm:grid-cols-3">
             <div>
               <p className="font-medium text-slate-700">Check in</p>
-              <p>{formatDateTime(todayAttendance?.check_in_at)}</p>
+              <p>{formatTime(todayAttendance?.check_in_at, settings.timezone)}</p>
             </div>
             <div>
               <p className="font-medium text-slate-700">Check out</p>
-              <p>{formatDateTime(todayAttendance?.check_out_at)}</p>
+              <p>{formatTime(todayAttendance?.check_out_at, settings.timezone)}</p>
             </div>
             <div>
               <p className="font-medium text-slate-700">Total hours</p>
-              <p>{todayAttendance?.total_hours ?? "-"}</p>
+              <p>{formatWorkedDuration(todayAttendance?.total_hours)}</p>
             </div>
           </div>
           <div className="mt-4 grid gap-2 sm:grid-cols-2">

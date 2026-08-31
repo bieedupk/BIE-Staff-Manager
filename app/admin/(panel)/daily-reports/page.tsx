@@ -10,7 +10,7 @@ import { departmentTextForProfile, fetchEmployeeDepartmentsByEmployee } from "@/
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import type { AttendanceRecord, DailyReport, Department, Profile } from "@/lib/types";
-import { formatDate, formatDateTime, isAdminManagerRole, todayISO } from "@/lib/utils";
+import { formatDate, formatDateTime, formatTime, formatWorkedDuration, isAdminManagerRole, todayISO } from "@/lib/utils";
 
 type Props = {
   searchParams?: Promise<{
@@ -239,7 +239,7 @@ export default async function AdminDailyReportsPage({ searchParams }: Props) {
                     <h2 className="font-extrabold text-slate-950">{report.profiles?.full_name || "Unknown employee"}</h2>
                     <p className="text-sm font-medium text-slate-500">
                       {report.profiles ? departmentTextForProfile(report.profiles, assignmentsByEmployee) : "Not assigned"} | {report.profiles?.designation || "-"} | {formatDate(report.report_date)} |
-                      Attendance: {report.hours_worked} hrs
+                      Attendance: {formatWorkedDuration(report.hours_worked)}
                     </p>
                   </div>
                   <div className="text-sm font-bold text-slate-500">
@@ -260,8 +260,8 @@ export default async function AdminDailyReportsPage({ searchParams }: Props) {
                   </summary>
                   <div className="mt-3 grid gap-2 text-sm text-slate-700">
                     <ReportText label="Attendance hours" value={`${report.hours_worked} hrs`} />
-                    <ReportText label="Check in" value={formatDateTime(attendanceByEmployee.get(report.employee_id)?.check_in_at)} />
-                    <ReportText label="Check out" value={formatDateTime(attendanceByEmployee.get(report.employee_id)?.check_out_at)} />
+                    <ReportText label="Check in" value={formatTime(attendanceByEmployee.get(report.employee_id)?.check_in_at)} />
+                    <ReportText label="Check out" value={formatTime(attendanceByEmployee.get(report.employee_id)?.check_out_at)} />
                     <ReportText label="Work summary" value={report.work_summary} />
                     <ReportText label="Tasks completed" value={report.tasks_completed} />
                     <ReportText label="Pending work" value={report.pending_work} />

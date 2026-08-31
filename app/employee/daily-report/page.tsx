@@ -6,7 +6,7 @@ import { SubmitButton } from "@/components/ui/submit-button";
 import { requireEmployeeProfile } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import type { DailyReport } from "@/lib/types";
-import { formatDate, todayISO } from "@/lib/utils";
+import { formatDate, formatWorkedDuration, todayISO } from "@/lib/utils";
 
 export default async function EmployeeDailyReportPage({
   searchParams
@@ -62,7 +62,7 @@ export default async function EmployeeDailyReportPage({
             reports.map((report) => (
               <article key={report.id} className="rounded-lg border border-slate-200 p-3">
                 <h3 className="font-extrabold text-slate-950">{formatDate(report.report_date)}</h3>
-                <p className="mt-2 text-sm font-medium text-slate-500">Hours: {report.hours_worked}</p>
+                <p className="mt-2 text-sm font-medium text-slate-500">Hours: {formatWorkedDuration(report.hours_worked)}</p>
                 <details className="group mt-3 rounded-lg bg-slate-50 p-3 text-sm text-slate-700">
                   <summary className="cursor-pointer list-none font-extrabold text-bie-700">
                     <span className="group-open:hidden">View Details</span>
@@ -74,7 +74,7 @@ export default async function EmployeeDailyReportPage({
                     <ReportText label="Pending work" value={report.pending_work} />
                     <ReportText label="Challenges / issues" value={report.challenges || "None"} />
                     <ReportText label="Tomorrow plan" value={report.tomorrow_plan || "-"} />
-                    <ReportText label="Attendance hours" value={`${report.hours_worked} hrs`} />
+                    <ReportText label="Attendance hours" value={formatWorkedDuration(report.hours_worked)} />
                   </div>
                   <div className="mt-3 rounded-lg bg-white p-3">
                     {isDailyReportReviewLocked(report) ? (

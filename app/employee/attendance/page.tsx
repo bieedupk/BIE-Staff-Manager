@@ -3,11 +3,12 @@ import { SubmitButton } from "@/components/ui/submit-button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { attendanceDisplayStatus, getTodayAttendanceForEmployee, getRecentAttendanceForEmployee, buildCompleteTimelineWithAbsent } from "@/lib/attendance";
+import { attendanceDisplayStatus, deriveAttendanceFlags, getTodayAttendanceForEmployee, getRecentAttendanceForEmployee, buildCompleteTimelineWithAbsent } from "@/lib/attendance";
 import { requireEmployeeProfile } from "@/lib/auth";
+import { getOrganizationSettings } from "@/lib/organization-settings";
 import { createClient } from "@/lib/supabase/server";
-import type { AttendanceRecord } from "@/lib/types";
-import { formatDate, formatDateTime, todayISO } from "@/lib/utils";
+import type { AttendanceRecord, OrganizationSettings } from "@/lib/types";
+import { formatDate, formatTime, formatWorkedDuration, todayISOInTimezone } from "@/lib/utils";
 
 const DEFAULT_HISTORY_DAYS = 10;
 
@@ -34,7 +35,8 @@ export default async function EmployeeAttendancePage({
   }>;
 }) {
   const profile = await requireEmployeeProfile();
-  const today = todayISO();
+  const settings = await getOrganizationSettings();
+  const today = todayISOInTimezone(settings.timezone);
   const supabase = await createClient();
   const resolvedSearchParams = await searchParams;
   const historyDate = resolvedSearchParams?.history_date || "";
@@ -55,7 +57,7 @@ export default async function EmployeeAttendancePage({
       } else {
         // Default: recent history with complete timeline including absent days
         const recentRecords = await getRecentAttendanceForEmployee(profile.id, today, "employee-attendance");
-        return buildCompleteTimelineWithAbsent(recentRecords, profile, subtractDaysISO(today, DEFAULT_HISTORY_DAYS), today);
+        return buildCompleteTimelineWithAbsent(recentRecords, profile, subtractDaysISO(today, DEFAULT_HISTORY_DAYS), today, settings);
       }
     })()
   ]);
@@ -73,20 +75,30 @@ export default async function EmployeeAttendancePage({
             <h2 className="font-extrabold text-slate-950">Today - {formatDate(today)}</h2>
             <p className="text-sm font-medium text-slate-500">One attendance record is allowed per employee per day.</p>
           </div>
-          <StatusBadge tone="attendance">{attendanceStatus}</StatusBadge>
+          <div className="flex flex-wrap items-center gap-2">
+            {attendance ? (
+              deriveAttendanceFlags(attendance, settings).displayStatuses.map((status) => (
+                <StatusBadge key={status} tone="attendance">
+                  {status}
+                </StatusBadge>
+              ))
+            ) : (
+              <StatusBadge tone="attendance">{attendanceStatus}</StatusBadge>
+            )}
+          </div>
         </div>
         <div className="mt-4 grid gap-2 text-sm text-slate-600 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
           <div>
             <p className="font-medium">Check in</p>
-            <p>{formatDateTime(attendance?.check_in_at)}</p>
+            <p>{formatTime(attendance?.check_in_at, settings.timezone)}</p>
           </div>
           <div>
             <p className="font-medium">Check out</p>
-            <p>{formatDateTime(attendance?.check_out_at)}</p>
+            <p>{formatTime(attendance?.check_out_at, settings.timezone)}</p>
           </div>
           <div>
             <p className="font-medium">Total</p>
-            <p>{attendance?.total_hours ?? "-"} hrs</p>
+            <p>{formatWorkedDuration(attendance?.total_hours)}</p>
           </div>
         </div>
         {!attendance ? <div className="mt-4"><EmptyState message="No attendance recorded for today." /></div> : null}
@@ -150,7 +162,7 @@ export default async function EmployeeAttendancePage({
         {records.length > 0 ? (
           <div className="mt-4 grid gap-3">
             {records.map((record) => (
-              <AttendanceHistoryRecord key={record.id} record={record} />
+              <AttendanceHistoryRecord key={record.id} record={record} settings={settings} />
             ))}
           </div>
         ) : historyDateSelected ? (
@@ -167,17 +179,32 @@ export default async function EmployeeAttendancePage({
   );
 }
 
-function AttendanceHistoryRecord({ record }: { record: AttendanceRecord }) {
+function AttendanceHistoryRecord({
+  record,
+  settings
+}: {
+  record: AttendanceRecord;
+  settings: Pick<OrganizationSettings, "timezone" | "late_threshold_time" | "office_start_time" | "office_end_time">;
+}) {
+  const flags = deriveAttendanceFlags(record, settings);
+  const displayStatuses = flags.displayStatuses.length ? flags.displayStatuses : [record.status];
+
   return (
     <article className="rounded-lg border border-slate-200 p-3">
       <div className="flex items-start justify-between gap-3">
         <p className="font-extrabold text-slate-950">{formatDate(record.work_date)}</p>
-        <StatusBadge tone="attendance">{record.status}</StatusBadge>
+        <div className="flex flex-wrap justify-end gap-2">
+          {displayStatuses.map((status) => (
+            <StatusBadge key={status} tone="attendance">
+              {status}
+            </StatusBadge>
+          ))}
+        </div>
       </div>
       <div className="mt-2 grid gap-1 text-sm text-slate-600">
-        <p><span className="font-medium">Check in:</span> {formatDateTime(record.check_in_at)}</p>
-        <p><span className="font-medium">Check out:</span> {formatDateTime(record.check_out_at)}</p>
-        <p><span className="font-medium">Total:</span> {record.total_hours ?? "-"} hrs</p>
+        <p><span className="font-medium">Check in:</span> {formatTime(record.check_in_at, settings.timezone)}</p>
+        <p><span className="font-medium">Check out:</span> {formatTime(record.check_out_at, settings.timezone)}</p>
+        <p><span className="font-medium">Total:</span> {formatWorkedDuration(record.total_hours)}</p>
       </div>
     </article>
   );
