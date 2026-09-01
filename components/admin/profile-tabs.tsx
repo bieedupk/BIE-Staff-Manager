@@ -20,6 +20,12 @@ export function ProfileTabs({ employeeId, activeTab = "overview" }: ProfileTabsP
       label: "Overview",
       href: `/admin/employees/${employeeId}`,
       isAvailable: true
+    },
+    {
+      id: "attendance",
+      label: "Attendance",
+      href: `/admin/employees/${employeeId}/attendance`,
+      isAvailable: true
     }
   ];
 
