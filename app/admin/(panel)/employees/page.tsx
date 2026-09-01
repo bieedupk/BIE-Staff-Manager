@@ -1,10 +1,13 @@
+import Link from "next/link";
 import { sendManualEmployeeWelcomeEmail, setEmployeeStatus, updateEmployee } from "@/app/actions/admin";
 import { disableAuthorizedDevice, registerAuthorizedDevice, resetAuthorizedDevice } from "@/app/actions/devices";
+import { Avatar } from "@/components/ui/avatar";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { requireAdminProfile } from "@/lib/auth";
+import { getAvatarSignedUrls } from "@/lib/avatar";
 import { departmentDisplayName } from "@/lib/department-utils";
 import { ensureDefaultDepartments } from "@/lib/default-departments";
 import { departmentNamesForProfile, fetchEmployeeDepartmentsByEmployee } from "@/lib/employee-departments";
@@ -82,10 +85,13 @@ export default async function AdminEmployeesPage({
   const disabledEmployeeCount = allEmployees.filter((profile) => profile.status === "disabled").length;
   const employees = allEmployees.filter((profile) => statusFilter === "all" || profile.status === statusFilter);
   const activeDepartments = (departments ?? []) as Department[];
-  const assignmentsByEmployee = await fetchEmployeeDepartmentsByEmployee(
-    supabase,
-    allEmployees.map((employee) => employee.id)
-  );
+  const [assignmentsByEmployee, avatarUrls] = await Promise.all([
+    fetchEmployeeDepartmentsByEmployee(
+      supabase,
+      allEmployees.map((employee) => employee.id)
+    ),
+    getAvatarSignedUrls(allEmployees.map((employee) => employee.avatar_path))
+  ]);
   const supervisors = allEmployees.filter((profile) => ["super_admin", "admin", "supervisor"].includes(profile.role));
   const devices = (authorizedDevices ?? []) as AuthorizedDevice[];
   const latestWelcomeEmailByEmployee = latestWelcomeEmailLogs((welcomeEmailLogs ?? []) as WelcomeEmailLog[]);
@@ -106,12 +112,12 @@ export default async function AdminEmployeesPage({
         backHref="/admin/dashboard"
         action={
           canManageEmployees ? (
-            <a
+            <Link
               href="/admin/employees/add"
               className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-bie-700 px-4 text-sm font-extrabold text-white shadow-soft transition hover:bg-bie-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bie-700 focus-visible:ring-offset-2"
             >
               Add Employee
-            </a>
+            </Link>
           ) : null
         }
       />
@@ -149,40 +155,69 @@ export default async function AdminEmployeesPage({
         {employees.length ? (
           employees.map((employee) => (
             <article key={employee.id} className="rounded-lg border border-emerald-100 bg-white p-4 shadow-soft">
-              <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                <div>
-                  <h3 className="font-extrabold text-slate-950">{employee.full_name}</h3>
-                  <p className="text-sm font-medium text-slate-500">{employee.email}</p>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    <StatusBadge>{roleLabel(employee.role)}</StatusBadge>
-                    <StatusBadge tone="employee">{roleLabel(employee.status)}</StatusBadge>
-                    {canManageEmployees ? (
-                      <WelcomeEmailStatus employee={employee} log={latestWelcomeEmailByEmployee.get(employee.id)} />
+              <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                <div className="flex items-start gap-3.5 min-w-0">
+                  <Link
+                    href={`/admin/employees/${employee.id}`}
+                    className="shrink-0 transition hover:opacity-90"
+                    aria-label={`View profile for ${employee.full_name}`}
+                  >
+                    <Avatar src={avatarUrls.get(employee.avatar_path || "")} name={employee.full_name} size="md" />
+                  </Link>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Link href={`/admin/employees/${employee.id}`} className="transition hover:text-bie-700">
+                        <h3 className="font-extrabold text-slate-950 hover:text-bie-700">{employee.full_name}</h3>
+                      </Link>
+                      {employee.employee_type ? (
+                        <span className="rounded-md bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600">
+                          {employee.employee_type}
+                        </span>
+                      ) : null}
+                    </div>
+                    <p className="text-sm font-medium text-slate-500">{employee.email}</p>
+                    {employee.designation ? (
+                      <p className="mt-0.5 text-xs font-semibold text-slate-700">{employee.designation}</p>
                     ) : null}
-                    {departmentNamesForProfile(employee, assignmentsByEmployee).map((departmentName) => (
-                      <StatusBadge key={departmentName}>{departmentName}</StatusBadge>
-                    ))}
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <StatusBadge>{roleLabel(employee.role)}</StatusBadge>
+                      <StatusBadge tone="employee">{roleLabel(employee.status)}</StatusBadge>
+                      {canManageEmployees ? (
+                        <WelcomeEmailStatus employee={employee} log={latestWelcomeEmailByEmployee.get(employee.id)} />
+                      ) : null}
+                      {departmentNamesForProfile(employee, assignmentsByEmployee).map((departmentName) => (
+                        <StatusBadge key={departmentName}>{departmentName}</StatusBadge>
+                      ))}
+                    </div>
                   </div>
                 </div>
-                {canManageEmployees ? (
-                  <div className="flex flex-wrap items-center gap-2">
-                    {employee.welcome_email_mode === "manual" && ["pending", "failed", "skipped"].includes(employee.welcome_email_status) ? (
-                      <form action={sendManualEmployeeWelcomeEmail}>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Link
+                    href={`/admin/employees/${employee.id}`}
+                    className="inline-flex min-h-10 items-center justify-center rounded-lg border border-emerald-200 bg-white px-3 py-2 text-sm font-bold text-bie-700 transition hover:bg-emerald-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bie-700"
+                  >
+                    View Profile
+                  </Link>
+                  {canManageEmployees ? (
+                    <>
+                      {employee.welcome_email_mode === "manual" && ["pending", "failed", "skipped"].includes(employee.welcome_email_status) ? (
+                        <form action={sendManualEmployeeWelcomeEmail}>
+                          <input type="hidden" name="id" value={employee.id} />
+                          <SubmitButton pendingText="Sending..." className="min-h-10 rounded-lg bg-bie-700 px-3 py-2 text-sm font-extrabold text-white transition hover:bg-bie-800 disabled:opacity-50">
+                            Send Welcome Email
+                          </SubmitButton>
+                        </form>
+                      ) : null}
+                      <form action={setEmployeeStatus}>
                         <input type="hidden" name="id" value={employee.id} />
-                        <SubmitButton pendingText="Sending..." className="rounded-lg bg-bie-700 px-3 py-2 text-sm font-extrabold text-white transition hover:bg-bie-800 disabled:opacity-50">
-                          Send Welcome Email
+                        <input type="hidden" name="status" value={employee.status === "active" ? "disabled" : "active"} />
+                        <SubmitButton pendingText="Updating..." className="min-h-10 rounded-lg border border-red-200 px-3 py-2 text-sm font-bold text-red-700 transition hover:bg-red-50 disabled:opacity-50">
+                          {employee.status === "active" ? "Disable" : "Enable"}
                         </SubmitButton>
                       </form>
-                    ) : null}
-                    <form action={setEmployeeStatus}>
-                      <input type="hidden" name="id" value={employee.id} />
-                      <input type="hidden" name="status" value={employee.status === "active" ? "disabled" : "active"} />
-                      <SubmitButton pendingText="Updating..." className="rounded-lg border border-red-200 px-3 py-2 text-sm font-bold text-red-700 transition hover:bg-red-50 disabled:opacity-50">
-                        {employee.status === "active" ? "Disable" : "Enable"}
-                      </SubmitButton>
-                    </form>
-                  </div>
-                ) : null}
+                    </>
+                  ) : null}
+                </div>
               </div>
               {canManageEmployees && employee.role === "employee" ? (
                 <AuthorizedDevicePanel devices={devicesByEmployee.get(employee.id) ?? []} employeeId={employee.id} />

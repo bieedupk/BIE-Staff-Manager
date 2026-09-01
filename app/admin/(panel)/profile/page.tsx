@@ -2,7 +2,7 @@ import { DepartmentBadges } from "@/components/common/department-badges";
 import { ProfilePhotoEditor } from "@/components/employee/profile-photo-editor";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { requireEmployeeProfile } from "@/lib/auth";
+import { requireAdminProfile } from "@/lib/auth";
 import { getAvatarSignedUrl } from "@/lib/avatar";
 import { getEmployeeDepartmentNames } from "@/lib/employee-departments";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -11,8 +11,8 @@ import { formatDate, roleLabel } from "@/lib/utils";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-export default async function EmployeeProfilePage() {
-  const profile = await requireEmployeeProfile();
+export default async function AdminProfilePage() {
+  const profile = await requireAdminProfile();
 
   const [departments, avatarUrl, supervisorName] = await Promise.all([
     getEmployeeDepartmentNames(profile.id, profile.department),
@@ -24,20 +24,20 @@ export default async function EmployeeProfilePage() {
     <>
       <PageHeader
         title="My Profile"
-        subtitle="View your staff profile details and manage your profile picture."
-        backHref="/employee/dashboard"
+        subtitle="Manage your profile picture and view your administrator account details."
+        backHref="/admin/dashboard"
       />
 
       <div className="grid gap-5">
         {/* Profile Picture Management Card */}
         <ProfilePhotoEditor initialAvatarUrl={avatarUrl} fullName={profile.full_name} />
 
-        {/* Profile Details (Read-only for employee) */}
+        {/* Administrator Profile Details (Read-only for Admin Self Profile) */}
         <section className="rounded-lg border border-emerald-100 bg-white p-5 shadow-soft">
           <div className="flex flex-col gap-1 border-b border-emerald-100 pb-4">
-            <h2 className="text-base font-extrabold text-slate-950">Employee Information</h2>
+            <h2 className="text-base font-extrabold text-slate-950">Administrator Information</h2>
             <p className="text-xs font-medium text-slate-500">
-              Personal and organizational details as registered by BIE administration.
+              Personal and organizational details associated with your administrative account.
             </p>
           </div>
 
@@ -70,12 +70,16 @@ export default async function EmployeeProfilePage() {
                 {profile.employee_type ? (
                   <ProfileItem label="Employee Type" value={profile.employee_type} />
                 ) : null}
-                <ProfileItem
-                  label="Departments"
-                  value={<DepartmentBadges departments={departments} />}
-                />
+                {departments.length > 0 ? (
+                  <ProfileItem
+                    label="Departments"
+                    value={<DepartmentBadges departments={departments} />}
+                  />
+                ) : null}
                 <ProfileItem label="Designation" value={profile.designation || "-"} />
-                <ProfileItem label="Supervisor" value={supervisorName || "No supervisor assigned"} />
+                {supervisorName ? (
+                  <ProfileItem label="Supervisor" value={supervisorName} />
+                ) : null}
               </dl>
             </div>
 

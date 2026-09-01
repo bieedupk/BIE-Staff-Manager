@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { createEmployee } from "@/app/actions/admin";
 import { EmployeeAssignmentFields } from "@/components/admin/employee-assignment-fields";
 import { PageHeader } from "@/components/ui/page-header";
@@ -135,12 +136,12 @@ export default async function AddEmployeePage({
             </div>
 
             <div className="border-t border-emerald-100/80 pt-5 flex items-center justify-end gap-3">
-              <a
+              <Link
                 href="/admin/employees"
                 className="rounded-lg border border-slate-300 bg-white px-5 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
               >
                 Cancel
-              </a>
+              </Link>
               <SubmitButton
                 pendingText="Creating employee..."
                 className="min-h-11 rounded-lg bg-bie-700 px-6 font-extrabold text-white transition hover:bg-bie-800 disabled:opacity-50"

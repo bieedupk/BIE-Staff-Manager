@@ -36,6 +36,7 @@ export type Profile = {
   welcome_email_status: WelcomeEmailStatus;
   employee_type: string | null;
   responsibilities: string | null;
+  avatar_path?: string | null;
   created_at: string;
 };
 

@@ -7,9 +7,10 @@ import { ChevronDown, ChevronRight, LayoutDashboard, Menu, X } from "lucide-reac
 import { DepartmentBadges } from "@/components/common/department-badges";
 import { LanguageToggle } from "@/components/layout/language-toggle";
 import { SignOutButton } from "@/components/layout/sign-out-button";
+import { Avatar } from "@/components/ui/avatar";
 import type { Locale } from "@/lib/i18n";
 import type { Profile } from "@/lib/types";
-import { roleLabel } from "@/lib/utils";
+import { isAdminRole, roleLabel } from "@/lib/utils";
 
 export type NavItem = {
   href: string;
@@ -26,6 +27,7 @@ type Props = {
   departmentText?: string;
   departments?: string[];
   headerWidget?: React.ReactNode;
+  avatarUrl?: string | null;
 };
 
 function isChildActive(href: string, currentPath: string | null) {
@@ -61,7 +63,8 @@ export function AppShell({
   signOutLabel,
   departmentText = "Not assigned",
   departments,
-  headerWidget
+  headerWidget,
+  avatarUrl
 }: Props) {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const pathname = usePathname();
@@ -100,6 +103,8 @@ export function AppShell({
     };
   }, [isDrawerOpen]);
 
+  const profileHref = isAdminRole(profile.role) ? "/admin/profile" : "/employee/profile";
+
   return (
     <div className="min-h-screen bg-slate-50">
       {/* Desktop Sidebar (Permanent on lg screens) */}
@@ -107,9 +112,18 @@ export function AppShell({
         <div className="flex min-h-0 flex-1 flex-col">
           <Brand />
           <div className="mt-6 shrink-0 rounded-lg bg-emerald-50 p-3">
-            <p className="font-bold text-slate-950">{profile.full_name}</p>
-            <p className="text-sm font-medium text-slate-600">{roleLabel(profile.role)}</p>
-            <div className="mt-2">
+            <Link
+              href={profileHref}
+              className="group flex items-center gap-3 transition hover:opacity-90"
+              aria-label="View your profile"
+            >
+              <Avatar src={avatarUrl} name={profile.full_name} size="sm" />
+              <div className="min-w-0 flex-1">
+                <p className="truncate font-bold text-slate-950 transition group-hover:text-bie-700">{profile.full_name}</p>
+                <p className="text-xs font-medium text-slate-600">{roleLabel(profile.role)}</p>
+              </div>
+            </Link>
+            <div className="mt-2.5">
               <DepartmentBadges departments={departmentNames} compact />
             </div>
           </div>
@@ -176,9 +190,19 @@ export function AppShell({
 
           {/* User / Admin Profile Card */}
           <div className="mt-4 shrink-0 rounded-lg border border-emerald-100/80 bg-emerald-50 p-3">
-            <p className="text-sm font-bold text-slate-950">{profile.full_name}</p>
-            <p className="text-xs font-medium text-slate-600">{roleLabel(profile.role)}</p>
-            <div className="mt-2">
+            <Link
+              href={profileHref}
+              onClick={() => setIsDrawerOpen(false)}
+              className="group flex items-center gap-3 transition hover:opacity-90"
+              aria-label="View your profile"
+            >
+              <Avatar src={avatarUrl} name={profile.full_name} size="sm" />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-bold text-slate-950 transition group-hover:text-bie-700">{profile.full_name}</p>
+                <p className="text-xs font-medium text-slate-600">{roleLabel(profile.role)}</p>
+              </div>
+            </Link>
+            <div className="mt-2.5">
               <DepartmentBadges departments={departmentNames} compact />
             </div>
           </div>

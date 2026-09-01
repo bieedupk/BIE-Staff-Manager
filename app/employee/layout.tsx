@@ -1,6 +1,7 @@
 import { AppShell } from "@/components/layout/app-shell";
 import { currentDeviceRequestInfo, unauthorizedDeviceMessage, verifyEmployeeDeviceAccess } from "@/lib/authorized-devices";
 import { requireEmployeeProfile } from "@/lib/auth";
+import { getAvatarSignedUrl } from "@/lib/avatar";
 import { getEmployeeDepartmentNames } from "@/lib/employee-departments";
 import { getLocale, t } from "@/lib/i18n";
 
@@ -18,10 +19,11 @@ export const revalidate = 0;
 
 export default async function EmployeeLayout({ children }: { children: React.ReactNode }) {
   const profile = await requireEmployeeProfile();
-  const [locale, departments, deviceInfo] = await Promise.all([
+  const [locale, departments, deviceInfo, avatarUrl] = await Promise.all([
     getLocale(),
     getEmployeeDepartmentNames(profile.id, profile.department),
-    currentDeviceRequestInfo()
+    currentDeviceRequestInfo(),
+    getAvatarSignedUrl(profile.avatar_path)
   ]);
   const deviceAccess = await verifyEmployeeDeviceAccess(profile, deviceInfo, {
     logMobileBlocked: true
@@ -33,6 +35,7 @@ export default async function EmployeeLayout({ children }: { children: React.Rea
       locale={locale}
       signOutLabel={t("signOut", locale)}
       departments={departments}
+      avatarUrl={avatarUrl}
       nav={employeeNav.map(([href, label]) => ({ href, label: t(label, locale) }))}
     >
       {deviceAccess.allowed ? children : <EmployeeAccessBlocked message={deviceAccess.message ?? unauthorizedDeviceMessage} />}
