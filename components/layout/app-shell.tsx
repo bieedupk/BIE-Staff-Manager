@@ -127,7 +127,7 @@ export function AppShell({
               <DepartmentBadges departments={departmentNames} compact />
             </div>
           </div>
-          <nav className="mt-6 grid min-h-0 flex-1 gap-1 overflow-y-auto pr-1">
+          <nav className="mt-6 flex min-h-0 flex-1 flex-col justify-start gap-1 overflow-y-auto pr-1">
             <NavigationLinks nav={nav} pathname={pathname} />
           </nav>
         </div>
@@ -208,7 +208,7 @@ export function AppShell({
           </div>
 
           {/* Navigation Links */}
-          <nav className="mt-4 grid min-h-0 flex-1 gap-1 overflow-y-auto pr-1">
+          <nav className="mt-4 flex min-h-0 flex-1 flex-col justify-start gap-1 overflow-y-auto pr-1">
             <NavigationLinks nav={nav} pathname={pathname} onItemClick={() => setIsDrawerOpen(false)} />
           </nav>
         </div>
@@ -265,12 +265,12 @@ function NavigationLinks({
           const isExpanded = isExplicitlySet ? expandedItems[item.href] : parentActive;
 
           return (
-            <div key={item.href || item.label} className="grid gap-1">
+            <div key={item.href || item.label} className="flex flex-col gap-1">
               <button
                 type="button"
                 onClick={() => toggleItem(item.href, isExpanded)}
                 aria-expanded={isExpanded}
-                className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-bold transition ${
+                className={`flex min-h-11 w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-bold transition ${
                   parentActive
                     ? "bg-emerald-50/90 text-bie-800"
                     : "text-slate-700 hover:bg-emerald-50 hover:text-bie-700"
@@ -284,7 +284,7 @@ function NavigationLinks({
                 )}
               </button>
               {isExpanded ? (
-                <div className="ms-3 grid gap-1 border-s-2 border-emerald-100 ps-2.5">
+                <div className="ms-3 flex flex-col gap-1 border-s-2 border-emerald-100 ps-2.5">
                   {item.children.map((child) => {
                     const childActive = isChildActive(child.href, pathname);
                     return (
@@ -292,7 +292,7 @@ function NavigationLinks({
                         key={child.href}
                         href={child.href}
                         onClick={onItemClick}
-                        className={`flex items-center rounded-lg px-2.5 py-1.5 text-xs transition ${
+                        className={`flex min-h-9 items-center rounded-lg px-2.5 py-1.5 text-xs transition ${
                           childActive
                             ? "border-s-4 border-bie-700 bg-emerald-100/90 font-extrabold text-bie-800 shadow-xs"
                             : "font-bold text-slate-600 hover:bg-emerald-50 hover:text-bie-700"
@@ -314,7 +314,7 @@ function NavigationLinks({
             key={item.href}
             href={item.href}
             onClick={onItemClick}
-            className={`flex items-center rounded-lg px-3 py-2 text-sm transition ${
+            className={`flex min-h-11 items-center rounded-lg px-3 py-2 text-sm transition ${
               active
                 ? "border-s-4 border-bie-700 bg-emerald-100/90 font-extrabold text-bie-800 shadow-xs"
                 : "font-bold text-slate-700 hover:bg-emerald-50 hover:text-bie-700"
