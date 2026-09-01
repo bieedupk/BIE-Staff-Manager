@@ -1,5 +1,4 @@
-import { createEmployee, sendManualEmployeeWelcomeEmail, setEmployeeStatus, updateEmployee } from "@/app/actions/admin";
-
+import { sendManualEmployeeWelcomeEmail, setEmployeeStatus, updateEmployee } from "@/app/actions/admin";
 import { disableAuthorizedDevice, registerAuthorizedDevice, resetAuthorizedDevice } from "@/app/actions/devices";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
@@ -103,8 +102,18 @@ export default async function AdminEmployeesPage({
     <>
       <PageHeader
         title="Employees"
-        subtitle="Add staff accounts, assign role, department, designation, supervisor, and disable inactive accounts."
+        subtitle="View staff accounts, filter by status, manage roles, departments, designations, supervisor, and device authorization."
         backHref="/admin/dashboard"
+        action={
+          canManageEmployees ? (
+            <a
+              href="/admin/employees/add"
+              className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-bie-700 px-4 text-sm font-extrabold text-white shadow-soft transition hover:bg-bie-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bie-700 focus-visible:ring-offset-2"
+            >
+              Add Employee
+            </a>
+          ) : null
+        }
       />
 
       {successMessage ? (
@@ -118,56 +127,7 @@ export default async function AdminEmployeesPage({
         </div>
       ) : null}
 
-      <section className="rounded-lg border border-emerald-100 bg-white p-4 shadow-soft">
-        <h2 className="font-extrabold text-slate-950">Add Employee</h2>
-        {canManageEmployees ? (
-        <form action={createEmployee} className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          <Input name="full_name" label="Full name" required />
-          <Input name="email" label="Email" type="email" required />
-          <Input name="password" label="Temporary password" type="password" required minLength={6} />
-          <Input name="phone" label="Phone" />
-          <Select name="employee_type" label="Employee Type" options={["", ...EMPLOYEE_TYPES]} />
-          <Textarea
-            name="responsibilities"
-            label="Responsibilities"
-            placeholder="Describe the employee's main responsibilities and duties"
-          />
-          <label className="grid gap-1 text-sm font-bold text-slate-700">
-            Welcome email
-            <select name="welcome_email_mode" defaultValue="automatic" className="min-h-11 rounded-lg border border-slate-300 px-3">
-              <option value="automatic">Send automatically</option>
-              <option value="manual">Send manually later</option>
-            </select>
-          </label>
-          <Input name="joining_date" label="Joining date" type="date" />
-          <Select name="role" label="Role" options={roles} />
-          <Select name="status" label="Status" options={statuses} />
-          <EmployeeAssignmentFields departments={activeDepartments} selectedDepartmentIds={defaultDepartmentId ? [defaultDepartmentId] : []} />
-          <label className="grid gap-1 text-sm font-bold text-slate-700">
-            Supervisor
-            <select name="supervisor_id" className="min-h-11 rounded-lg border border-slate-300 px-3">
-              <option value="">No supervisor</option>
-              {supervisors.map((supervisor) => (
-                <option key={supervisor.id} value={supervisor.id}>
-                  {supervisor.full_name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <div className="md:col-span-2 xl:col-span-3">
-            <SubmitButton pendingText="Creating employee..." className="min-h-11 rounded-lg bg-bie-700 px-4 font-extrabold text-white transition hover:bg-bie-800 disabled:opacity-50">
-              Create employee
-            </SubmitButton>
-          </div>
-        </form>
-        ) : (
-          <p className="mt-2 text-sm font-medium text-slate-500">
-            Supervisors can monitor assigned employees here. Account creation and editing is limited to admin and super admin.
-          </p>
-        )}
-      </section>
-
-      <section className="mt-5">
+      <section>
         <div className="mb-4 flex flex-wrap gap-2">
           {employeeFilters.map((filter) => {
             const count = filter === "active" ? activeEmployeeCount : filter === "disabled" ? disabledEmployeeCount : allEmployees.length;
@@ -275,7 +235,7 @@ export default async function AdminEmployeesPage({
             </article>
           ))
         ) : (
-          <EmptyState message={statusFilter === "all" ? "No employee profiles found. Create your first staff account above." : `No ${statusFilter} employee profiles found.`} />
+          <EmptyState message={statusFilter === "all" ? "No employee profiles found." : `No ${statusFilter} employee profiles found.`} />
         )}
         </div>
       </section>

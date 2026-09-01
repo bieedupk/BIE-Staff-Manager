@@ -10,6 +10,7 @@ export function SignOutButton({ label = "Sign Out" }: { label?: string }) {
   async function signOut() {
     const supabase = createClient();
     await supabase.auth.signOut();
+    document.cookie = "bie_remember_me=; path=/; max-age=0; SameSite=Lax";
     router.replace("/login");
     router.refresh();
   }

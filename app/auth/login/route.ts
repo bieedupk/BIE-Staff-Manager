@@ -24,8 +24,38 @@ function safeNextPath(value: FormDataEntryValue | null) {
   return nextPath;
 }
 
-function withAuthCookies(response: NextResponse, cookies: AuthCookie[], headers: Record<string, string>) {
-  cookies.forEach(({ name, value, options }) => response.cookies.set(name, value, options));
+function withAuthCookies(
+  response: NextResponse,
+  cookies: AuthCookie[],
+  headers: Record<string, string>,
+  isRememberMe: boolean = false
+) {
+  cookies.forEach(({ name, value, options }) => {
+    const cookieOptions: CookieOptions = isRememberMe
+      ? options
+      : {
+          ...options,
+          maxAge: undefined,
+          expires: undefined
+        };
+    response.cookies.set(name, value, cookieOptions);
+  });
+
+  if (isRememberMe) {
+    response.cookies.set("bie_remember_me", "1", {
+      path: "/",
+      maxAge: 400 * 24 * 60 * 60,
+      sameSite: "lax",
+      httpOnly: false
+    });
+  } else {
+    response.cookies.set("bie_remember_me", "", {
+      path: "/",
+      maxAge: 0,
+      sameSite: "lax"
+    });
+  }
+
   Object.entries(headers).forEach(([key, value]) => response.headers.set(key, value));
   return response;
 }
@@ -130,8 +160,12 @@ export async function POST(request: NextRequest) {
     const formData = await request.formData();
     const email = String(formData.get("email") || "").trim();
     const password = String(formData.get("password") || "");
+    const isRememberMe =
+      formData.get("remember_me") === "true" ||
+      formData.get("remember_me") === "on" ||
+      formData.get("remember_me") === "1";
     const nextPath = safeNextPath(formData.get("next"));
-    devAuthLog("login email", { email });
+    devAuthLog("login email", { email, isRememberMe });
 
     if (!email || !password) {
       return NextResponse.json({ error: "Email and password are required." }, { status: 400 });
@@ -174,7 +208,8 @@ export async function POST(request: NextRequest) {
       return withAuthCookies(
         NextResponse.json({ error: "Login could not be verified. Please try again." }, { status: 401 }),
         authCookies,
-        authHeaders
+        authHeaders,
+        false
       );
     }
 
@@ -185,7 +220,8 @@ export async function POST(request: NextRequest) {
       return withAuthCookies(
         NextResponse.json({ error: "Your account is disabled. Please contact administration." }, { status: 403 }),
         authCookies,
-        authHeaders
+        authHeaders,
+        false
       );
     }
 
@@ -194,7 +230,8 @@ export async function POST(request: NextRequest) {
       return withAuthCookies(
         NextResponse.json({ error: "Your account is inactive or missing a staff profile." }, { status: 403 }),
         authCookies,
-        authHeaders
+        authHeaders,
+        false
       );
     }
 
@@ -207,7 +244,8 @@ export async function POST(request: NextRequest) {
       return withAuthCookies(
         NextResponse.json({ error: deviceAccess.message || "This device is not authorized." }, { status: 403 }),
         authCookies,
-        authHeaders
+        authHeaders,
+        false
       );
     }
 
@@ -216,7 +254,8 @@ export async function POST(request: NextRequest) {
         redirectTo: nextPath || homeForRole(profile.role)
       }),
       authCookies,
-      authHeaders
+      authHeaders,
+      isRememberMe
     );
   } catch (error) {
     const message = stringFromUnknown(error);

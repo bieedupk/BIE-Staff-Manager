@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { hasPublicSupabaseEnv } from "@/lib/env";
 
 const protectedPrefixes = ["/admin", "/employee"];
-const publicRecoveryPrefixes = ["/forgot-password", "/reset-password", "/auth/callback", "/login"];
+const publicRecoveryPrefixes = ["/forgot-password", "/reset-password", "/auth/callback", "/auth/confirm", "/login"];
 
 export async function proxy(request: NextRequest) {
   let response = NextResponse.next({
@@ -38,7 +38,13 @@ export async function proxy(request: NextRequest) {
         setAll(cookiesToSet) {
           cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
           response = NextResponse.next({ request });
-          cookiesToSet.forEach(({ name, value, options }) => response.cookies.set(name, value, options));
+          const isRememberMe = request.cookies.get("bie_remember_me")?.value === "1";
+          cookiesToSet.forEach(({ name, value, options }) => {
+            const cookieOptions = isRememberMe
+              ? options
+              : { ...options, maxAge: undefined, expires: undefined };
+            response.cookies.set(name, value, cookieOptions);
+          });
         }
       }
     }

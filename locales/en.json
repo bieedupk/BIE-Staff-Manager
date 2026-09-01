@@ -5,6 +5,8 @@
   "forgotPassword": "Forgot Password",
   "dashboard": "Dashboard",
   "employees": "Employees",
+  "addEmployee": "Add Employee",
+  "viewEmployees": "View Employees",
   "attendance": "Attendance",
   "tasks": "Tasks",
   "leaves": "Leaves",

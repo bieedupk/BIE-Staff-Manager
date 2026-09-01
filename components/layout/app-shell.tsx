@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Menu, X } from "lucide-react";
+import { ChevronDown, ChevronRight, LayoutDashboard, Menu, X } from "lucide-react";
 import { DepartmentBadges } from "@/components/common/department-badges";
 import { LanguageToggle } from "@/components/layout/language-toggle";
 import { SignOutButton } from "@/components/layout/sign-out-button";
@@ -11,9 +11,10 @@ import type { Locale } from "@/lib/i18n";
 import type { Profile } from "@/lib/types";
 import { roleLabel } from "@/lib/utils";
 
-type NavItem = {
+export type NavItem = {
   href: string;
   label: string;
+  children?: NavItem[];
 };
 
 type Props = {
@@ -27,10 +28,26 @@ type Props = {
   headerWidget?: React.ReactNode;
 };
 
-function isItemActive(href: string, currentPath: string | null) {
+function isChildActive(href: string, currentPath: string | null) {
   if (!currentPath) return false;
   if (currentPath === href) return true;
-  if (href !== "/admin" && href !== "/employee" && currentPath.startsWith(href + "/")) {
+  if (href !== "/admin" && href !== "/admin/employees" && href !== "/employee" && currentPath.startsWith(href + "/")) {
+    return true;
+  }
+  return false;
+}
+
+function isItemActive(item: NavItem, currentPath: string | null) {
+  if (!currentPath) return false;
+  if (item.children && item.children.length > 0) {
+    return (
+      item.children.some((child) => isChildActive(child.href, currentPath)) ||
+      currentPath === item.href ||
+      (item.href !== "/admin" && item.href !== "/employee" && currentPath.startsWith(item.href + "/"))
+    );
+  }
+  if (currentPath === item.href) return true;
+  if (item.href !== "/admin" && item.href !== "/employee" && currentPath.startsWith(item.href + "/")) {
     return true;
   }
   return false;
@@ -97,22 +114,7 @@ export function AppShell({
             </div>
           </div>
           <nav className="mt-6 grid min-h-0 flex-1 gap-1 overflow-y-auto pr-1">
-            {nav.map((item) => {
-              const active = isItemActive(item.href, pathname);
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className={`flex items-center rounded-lg px-3 py-2 text-sm transition ${
-                    active
-                      ? "border-s-4 border-bie-700 bg-emerald-100/90 font-extrabold text-bie-800 shadow-xs"
-                      : "font-bold text-slate-700 hover:bg-emerald-50 hover:text-bie-700"
-                  }`}
-                >
-                  {item.label}
-                </Link>
-              );
-            })}
+            <NavigationLinks nav={nav} pathname={pathname} />
           </nav>
         </div>
         <div className="mt-4 grid shrink-0 gap-3 border-t border-emerald-100 pt-4">
@@ -183,23 +185,7 @@ export function AppShell({
 
           {/* Navigation Links */}
           <nav className="mt-4 grid min-h-0 flex-1 gap-1 overflow-y-auto pr-1">
-            {nav.map((item) => {
-              const active = isItemActive(item.href, pathname);
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  onClick={() => setIsDrawerOpen(false)}
-                  className={`flex items-center rounded-lg px-3 py-2 text-sm transition ${
-                    active
-                      ? "border-s-4 border-bie-700 bg-emerald-100/90 font-extrabold text-bie-800 shadow-xs"
-                      : "font-bold text-slate-700 hover:bg-emerald-50 hover:text-bie-700"
-                  }`}
-                >
-                  {item.label}
-                </Link>
-              );
-            })}
+            <NavigationLinks nav={nav} pathname={pathname} onItemClick={() => setIsDrawerOpen(false)} />
           </nav>
         </div>
 
@@ -216,6 +202,105 @@ export function AppShell({
         {children}
       </main>
     </div>
+  );
+}
+
+function NavigationLinks({
+  nav,
+  pathname,
+  onItemClick
+}: {
+  nav: NavItem[];
+  pathname: string | null;
+  onItemClick?: () => void;
+}) {
+  const [expandedItems, setExpandedItems] = useState<Record<string, boolean>>({});
+  const [prevPathname, setPrevPathname] = useState(pathname);
+
+  // Sync expanded state when pathname changes
+  if (prevPathname !== pathname) {
+    setPrevPathname(pathname);
+    setExpandedItems({});
+  }
+
+  function toggleItem(key: string, isCurrentlyExpanded: boolean) {
+    setExpandedItems((prev) => ({
+      ...prev,
+      [key]: !isCurrentlyExpanded
+    }));
+  }
+
+  return (
+    <>
+      {nav.map((item) => {
+        const hasChildren = Boolean(item.children && item.children.length > 0);
+        const parentActive = isItemActive(item, pathname);
+
+        if (hasChildren && item.children) {
+          const isExplicitlySet = expandedItems[item.href] !== undefined;
+          const isExpanded = isExplicitlySet ? expandedItems[item.href] : parentActive;
+
+          return (
+            <div key={item.href || item.label} className="grid gap-1">
+              <button
+                type="button"
+                onClick={() => toggleItem(item.href, isExpanded)}
+                aria-expanded={isExpanded}
+                className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-bold transition ${
+                  parentActive
+                    ? "bg-emerald-50/90 text-bie-800"
+                    : "text-slate-700 hover:bg-emerald-50 hover:text-bie-700"
+                }`}
+              >
+                <span>{item.label}</span>
+                {isExpanded ? (
+                  <ChevronDown size={16} className="text-bie-700" aria-hidden="true" />
+                ) : (
+                  <ChevronRight size={16} className="text-slate-400" aria-hidden="true" />
+                )}
+              </button>
+              {isExpanded ? (
+                <div className="ms-3 grid gap-1 border-s-2 border-emerald-100 ps-2.5">
+                  {item.children.map((child) => {
+                    const childActive = isChildActive(child.href, pathname);
+                    return (
+                      <Link
+                        key={child.href}
+                        href={child.href}
+                        onClick={onItemClick}
+                        className={`flex items-center rounded-lg px-2.5 py-1.5 text-xs transition ${
+                          childActive
+                            ? "border-s-4 border-bie-700 bg-emerald-100/90 font-extrabold text-bie-800 shadow-xs"
+                            : "font-bold text-slate-600 hover:bg-emerald-50 hover:text-bie-700"
+                        }`}
+                      >
+                        {child.label}
+                      </Link>
+                    );
+                  })}
+                </div>
+              ) : null}
+            </div>
+          );
+        }
+
+        const active = isItemActive(item, pathname);
+        return (
+          <Link
+            key={item.href}
+            href={item.href}
+            onClick={onItemClick}
+            className={`flex items-center rounded-lg px-3 py-2 text-sm transition ${
+              active
+                ? "border-s-4 border-bie-700 bg-emerald-100/90 font-extrabold text-bie-800 shadow-xs"
+                : "font-bold text-slate-700 hover:bg-emerald-50 hover:text-bie-700"
+            }`}
+          >
+            {item.label}
+          </Link>
+        );
+      })}
+    </>
   );
 }
 

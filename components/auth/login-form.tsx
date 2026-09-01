@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Eye, EyeOff } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { authServiceUnavailableMessage, missingSupabaseEnvMessage } from "@/lib/env";
 
@@ -44,6 +45,7 @@ export function LoginForm({ supabaseConfigured = true }: { supabaseConfigured?: 
   const [error, setError] = useState(initialError);
   const [message, setMessage] = useState(initialMessage);
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -112,15 +114,38 @@ export function LoginForm({ supabaseConfigured = true }: { supabaseConfigured?: 
       </label>
       <label className="grid gap-2 text-sm font-bold text-slate-700">
         Password
-        <input
-          name="password"
-          type="password"
-          autoComplete="current-password"
-          required
-          disabled={!supabaseConfigured}
-          className="min-h-11 rounded-lg border border-slate-300 px-3 outline-none focus:border-bie-600 focus:ring-4 focus:ring-emerald-100"
-        />
+        <div className="relative flex items-center">
+          <input
+            name="password"
+            type={showPassword ? "text" : "password"}
+            autoComplete="current-password"
+            required
+            disabled={!supabaseConfigured}
+            className="min-h-11 w-full rounded-lg border border-slate-300 pe-11 ps-3 outline-none focus:border-bie-600 focus:ring-4 focus:ring-emerald-100"
+          />
+          <button
+            type="button"
+            onClick={() => setShowPassword((prev) => !prev)}
+            aria-label={showPassword ? "Hide password" : "Show password"}
+            disabled={!supabaseConfigured}
+            className="absolute end-0 flex size-11 items-center justify-center text-slate-500 hover:text-bie-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bie-700 rounded-e-lg disabled:opacity-50"
+          >
+            {showPassword ? <EyeOff size={18} aria-hidden="true" /> : <Eye size={18} aria-hidden="true" />}
+          </button>
+        </div>
       </label>
+      <div className="flex items-center justify-between">
+        <label className="inline-flex cursor-pointer items-center gap-2 text-sm font-semibold text-slate-700">
+          <input
+            name="remember_me"
+            type="checkbox"
+            value="true"
+            defaultChecked={true}
+            className="size-4 rounded border-slate-300 text-bie-700 accent-bie-700 focus:ring-bie-600"
+          />
+          Remember Me
+        </label>
+      </div>
       {error ? <p className="rounded-lg bg-red-50 p-3 text-sm font-semibold text-red-700">{error}</p> : null}
       {message ? <p className="rounded-lg bg-emerald-50 p-3 text-sm font-semibold text-emerald-700">{message}</p> : null}
       <button

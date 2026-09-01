@@ -380,6 +380,7 @@ export async function createEmployee(formData: FormData) {
     }
 
     revalidatePath("/admin/employees");
+    revalidatePath("/admin/employees/add");
     revalidatePath("/admin/dashboard");
     success = true;
   } catch (error) {
@@ -390,7 +391,11 @@ export async function createEmployee(formData: FormData) {
     errorMessage = error instanceof Error ? error.message : errorMessage;
   }
 
-  redirectEmployeeStatus(success ? "success" : "error", success ? successMessage : errorMessage);
+  if (success) {
+    redirect(`/admin/employees?employee_success=${encodeURIComponent(successMessage)}`);
+  } else {
+    redirect(`/admin/employees/add?employee_error=${encodeURIComponent(errorMessage)}`);
+  }
 }
 
 export async function updateEmployee(formData: FormData) {

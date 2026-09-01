@@ -122,11 +122,14 @@ async function createSetupLink(email: string) {
       type: "recovery",
       email,
       options: {
-        redirectTo: `${appBaseUrl.replace(/\/$/, "")}/auth/callback`
+        redirectTo: `${appBaseUrl.replace(/\/$/, "")}/auth/confirm?next=/reset-password`
       }
     });
 
     if (error) return null;
+    if (data.properties?.hashed_token) {
+      return `${appBaseUrl.replace(/\/$/, "")}/auth/confirm?token_hash=${data.properties.hashed_token}&type=recovery&next=/reset-password`;
+    }
     return data.properties?.action_link ?? null;
   } catch {
     return null;
