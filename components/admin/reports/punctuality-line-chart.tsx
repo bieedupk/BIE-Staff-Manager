@@ -1,10 +1,10 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 
 type PunctualityData = {
   label: string;
-  actualMinutes: number | null; 
+  actualMinutes: number | null;
   scheduledMinutes: number;
   actualTimeStr: string | null;
   scheduledTimeStr: string;
@@ -15,16 +15,39 @@ type PunctualityData = {
   dateStr: string;
 };
 
-export function PunctualityLineChart({ data, title }: { data: PunctualityData[]; title: string }) {
+export function PunctualityLineChart({ data, title, animationKey }: { data: PunctualityData[]; title: string; animationKey?: string }) {
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
+  const [entered, setEntered] = useState(false);
+
+  useEffect(() => {
+    let raf1: number;
+    let raf2: number;
+
+    raf1 = requestAnimationFrame(() => {
+      const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      if (prefersReducedMotion) {
+        setEntered(true);
+        return;
+      }
+
+      raf2 = requestAnimationFrame(() => {
+        setEntered(true);
+      });
+    });
+
+    return () => {
+      cancelAnimationFrame(raf1);
+      cancelAnimationFrame(raf2);
+    };
+  }, [animationKey]);
 
   // Determine Y-axis window
   const validActuals = data.filter(d => d.actualMinutes !== null).map(d => d.actualMinutes as number);
   const scheds = data.map(d => d.scheduledMinutes);
-  
+
   const minMinutes = Math.min(...validActuals, ...scheds, 1440);
   const maxMinutes = Math.max(...validActuals, ...scheds, 0);
-  
+
   const paddedMin = Math.min(minMinutes - 15, 8 * 60 - 30); // At least 7:30 AM
   const paddedMax = Math.max(maxMinutes + 15, 10 * 60); // At least 10:00 AM
   const range = paddedMax - paddedMin || 1;
@@ -38,7 +61,7 @@ export function PunctualityLineChart({ data, title }: { data: PunctualityData[];
 
   const segments: { x: number, y: number, isLate: boolean }[][] = [];
   let currentSegment: { x: number, y: number, isLate: boolean }[] = [];
-  
+
   data.forEach((d, i) => {
     if (d.actualMinutes !== null) {
       const x = getX(i);
@@ -102,13 +125,18 @@ export function PunctualityLineChart({ data, title }: { data: PunctualityData[];
         </div>
 
         <div className="flex-1 relative px-2 sm:px-4" style={{ minHeight: "220px", maxHeight: "280px" }}>
-          <svg viewBox={`0 0 ${width} ${height}`} className="h-full w-full overflow-visible motion-safe:animate-fade-in" preserveAspectRatio="none">
-            
+          <svg
+            viewBox={`0 0 ${width} ${height}`}
+            className="h-full w-full overflow-visible motion-safe:animate-fade-in"
+            preserveAspectRatio="none"
+            style={entered ? { animation: "chart-settle 400ms ease-out forwards 1600ms" } : undefined}
+          >
+
             {/* Horizontal Grid Lines */}
             {yTicks.map(m => {
               const y = height - ((m - paddedMin) / range) * height;
               return (
-                <line 
+                <line
                   key={`grid-${m}`}
                   x1="0" y1={y} x2={width} y2={y}
                   stroke="#f1f5f9" // slate-100
@@ -139,13 +167,20 @@ export function PunctualityLineChart({ data, title }: { data: PunctualityData[];
                 stroke="currentColor"
                 className="text-report-text opacity-40"
                 strokeWidth="2"
+                pathLength="1"
+                style={{
+                  strokeDasharray: "1",
+                  strokeDashoffset: entered ? "0" : "1",
+                  transition: "stroke-dashoffset 1600ms linear",
+                }}
               />
             ))}
 
             {/* Status Markers and Points */}
             {data.map((d, i) => {
               const x = getX(i);
-              
+              const pointDelay = i * 150;
+
               if (d.actualMinutes !== null) {
                 const y = height - ((d.actualMinutes - paddedMin) / range) * height;
                 return (
@@ -158,18 +193,24 @@ export function PunctualityLineChart({ data, title }: { data: PunctualityData[];
                     className={d.isLate ? "text-report-late" : "text-report-present"}
                     stroke="#fff"
                     strokeWidth="2"
+                    style={{
+                      opacity: entered ? 1 : 0,
+                      transform: entered ? "translateY(0)" : "translateY(4px)",
+                      transition: "opacity 400ms ease-out, transform 400ms ease-out",
+                      transitionDelay: `${pointDelay}ms`
+                    }}
                   />
                 );
               } else {
                 // Render status indicator near the bottom for Absent / Pending days
                 const markerY = height - 10;
-                
+
                 if (d.isAbsent) {
-                  return <circle key={`absent-${i}`} cx={x} cy={markerY} r="4" fill="currentColor" className="text-report-absent" />;
+                  return <circle key={`absent-${i}`} cx={x} cy={markerY} r="4" fill="currentColor" className="text-report-absent" style={{ opacity: entered ? 1 : 0, transform: entered ? "translateY(0)" : "translateY(4px)", transition: "opacity 400ms ease-out, transform 400ms ease-out", transitionDelay: `${pointDelay}ms` }} />;
                 }
-                
+
                 if (d.isPending) {
-                  return <circle key={`pending-${i}`} cx={x} cy={markerY} r="4" fill="currentColor" className="text-report-pending opacity-50" />;
+                  return <circle key={`pending-${i}`} cx={x} cy={markerY} r="4" fill="currentColor" className="text-report-pending" style={{ opacity: entered ? 0.5 : 0, transform: entered ? "translateY(0)" : "translateY(4px)", transition: "opacity 400ms ease-out, transform 400ms ease-out", transitionDelay: `${pointDelay}ms` }} />;
                 }
 
                 return null;
@@ -193,23 +234,23 @@ export function PunctualityLineChart({ data, title }: { data: PunctualityData[];
 
           {/* Absolute Tooltip Overlay */}
           {hoveredIndex !== null && (
-            <div 
+            <div
               className="pointer-events-none absolute z-50 mb-4 w-max -translate-x-1/2 rounded-lg bg-slate-900/95 px-3 py-2.5 text-xs text-white shadow-xl backdrop-blur-sm"
-              style={{ 
+              style={{
                 left: `${((hoveredIndex + 0.5) / data.length) * 100}%`,
-                bottom: data[hoveredIndex].actualMinutes !== null 
+                bottom: data[hoveredIndex].actualMinutes !== null
                   ? `${((data[hoveredIndex].actualMinutes! - paddedMin) / range) * 100}%`
                   : '0%' // Near bottom for absent
               }}
             >
               <div className="mb-2 border-b border-slate-700/50 pb-1.5 font-bold text-slate-100">{data[hoveredIndex].dateStr}</div>
-              
+
               <div className="mb-2 flex items-start gap-1">
                 <span className="text-slate-400">Status: </span>
                 <span className="font-semibold text-white">
-                  {data[hoveredIndex].isAbsent ? <span className="text-red-400">Absent</span> : 
-                   data[hoveredIndex].isPending ? <span className="text-slate-400">Pending</span> : 
-                   data[hoveredIndex].isLate ? <span className="text-amber-400">Late</span> : 
+                  {data[hoveredIndex].isAbsent ? <span className="text-red-400">Absent</span> :
+                   data[hoveredIndex].isPending ? <span className="text-slate-400">Pending</span> :
+                   data[hoveredIndex].isLate ? <span className="text-amber-400">Late</span> :
                    <span className="text-emerald-400">On-time</span>}
                 </span>
               </div>
@@ -228,24 +269,24 @@ export function PunctualityLineChart({ data, title }: { data: PunctualityData[];
               ) : (
                 <div className="text-slate-400">No check-in</div>
               )}
-              
+
               <div className="absolute -bottom-1 left-1/2 h-2.5 w-2.5 -translate-x-1/2 rotate-45 bg-slate-900/95"></div>
             </div>
           )}
         </div>
       </div>
 
-      <div 
+      <div
         className="relative mx-auto w-full max-w-4xl"
         dir="ltr"
       >
-        <div 
+        <div
           className="ml-10 mt-3 grid gap-2 sm:gap-3 lg:gap-5 px-2 sm:px-4"
           style={{ gridTemplateColumns: `repeat(${data.length}, minmax(0, 1fr))` }}
         >
           {data.map((d, i) => (
-            <div 
-              key={`lbl-${i}`} 
+            <div
+              key={`lbl-${i}`}
               className="text-center text-[11px] sm:text-xs font-semibold text-slate-500 truncate"
             >
               {(data.length > 10 && i % Math.ceil(data.length / 8) !== 0) ? "" : d.label}

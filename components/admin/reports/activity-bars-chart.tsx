@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { formatDurationMinutes } from "@/lib/utils";
 
 type ActivityData = {
@@ -16,52 +16,44 @@ type ActivityData = {
   isPending?: boolean;
 };
 
-export function ActivityBarsChart({ data, title }: { data: ActivityData[]; title: string }) {
-  const containerRef = useRef<HTMLDivElement>(null);
+export function ActivityBarsChart({ data, title, animationKey }: { data: ActivityData[]; title: string; animationKey?: string }) {
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
+  const [entered, setEntered] = useState(false);
+  const [reducedMotion, setReducedMotion] = useState(false);
 
   useEffect(() => {
-    const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    if (prefersReducedMotion) return;
+    let raf1: number;
+    let raf2: number;
 
-    if (containerRef.current) {
-      const bars = containerRef.current.querySelectorAll(".activity-bar-anim");
-      bars.forEach((bar, index) => {
-        bar.animate(
-          [
-            { transform: "scaleY(0)" },
-            { transform: "scaleY(1)" }
-          ],
-          {
-            duration: 500,
-            delay: index * (300 / Math.max(1, bars.length)),
-            easing: "cubic-bezier(0.16, 1, 0.3, 1)",
-            fill: "none"
-          }
-        );
-      });
-      
-      const markers = containerRef.current.querySelectorAll(".status-marker");
-      markers.forEach((marker, index) => {
-        marker.animate(
-          [
-            { opacity: 0 },
-            { opacity: 1 }
-          ],
-          {
-            duration: 400,
-            delay: 400 + (index * (100 / Math.max(1, markers.length))),
-            easing: "ease-out",
-            fill: "none"
-          }
-        );
-      });
-    }
-  }, [data, title]); // title change implies period type change
+    // Safely reset entered to allow initial paint before animating
+    // By using a small timeout, we avoid synchronous setState in effect body
+    const initTimer = setTimeout(() => {
+      const prefers = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      setReducedMotion(prefers);
 
+      if (prefers) {
+        setEntered(true);
+        return;
+      }
+
+      setEntered(false);
+
+      raf1 = requestAnimationFrame(() => {
+        raf2 = requestAnimationFrame(() => {
+          setEntered(true);
+        });
+      });
+    }, 0);
+
+    return () => {
+      clearTimeout(initTimer);
+      cancelAnimationFrame(raf1);
+      cancelAnimationFrame(raf2);
+    };
+  }, [animationKey]);
   const highestDataMins = Math.max(...data.map(d => Math.max(d.worked, d.scheduled)));
   const baseMax = Math.max(8 * 60, highestDataMins);
-  
+
   // Modest headroom: add 60 minutes and round up to the nearest 120 (2 hours)
   const maxVal = Math.ceil((baseMax + 60) / 120) * 120;
 
@@ -80,6 +72,18 @@ export function ActivityBarsChart({ data, title }: { data: ActivityData[]; title
   const isMonthly = data.length > 25;
   const barMaxWidth = isMonthly ? "max-w-[20px]" : "max-w-[48px]";
   const barBaseWidth = isMonthly ? "w-[40%]" : "w-[50%]";
+
+  let currentPopulated = 0;
+  const populatedIndices = data.map(d => {
+    if (d.worked > 0) {
+      const idx = currentPopulated;
+      currentPopulated++;
+      return idx;
+    }
+    return -1;
+  });
+
+  const delayInterval = data.length > 25 ? 28 : data.length > 10 ? 70 : 100;
 
   return (
     <div className="flex h-full w-full flex-col p-1 sm:p-2">
@@ -113,7 +117,7 @@ export function ActivityBarsChart({ data, title }: { data: ActivityData[]; title
       </div>
 
       <div className="relative flex flex-1 w-full mx-auto max-w-4xl" dir="ltr" onMouseLeave={() => setHoveredIndex(null)}>
-        
+
         {/* Y-Axis scale */}
         <div className="w-10 shrink-0 relative border-r border-slate-100 flex flex-col justify-between py-0 text-[10px] font-medium text-slate-400">
           {yTicks.map(m => {
@@ -128,13 +132,13 @@ export function ActivityBarsChart({ data, title }: { data: ActivityData[]; title
 
         {/* Plotting Area */}
         <div className="relative flex-1 px-2 sm:px-4" style={{ minHeight: "220px", maxHeight: "280px" }}>
-          
+
           {/* Horizontal Grid Lines matching Y-ticks */}
           {yTicks.map(m => {
             const yPct = (m / maxVal) * 100;
             if (m === 0) return null; // hide bottom line
             return (
-              <div 
+              <div
                 key={`grid-${m}`}
                 className="absolute left-0 right-0 z-0 h-px bg-slate-100/60"
                 style={{ bottom: `${yPct}%` }}
@@ -144,7 +148,7 @@ export function ActivityBarsChart({ data, title }: { data: ActivityData[]; title
 
           {/* Global Scheduled Reference Line */}
           {maxScheduled > 0 && (
-            <div 
+            <div
               className="absolute left-0 right-0 z-0 h-px border-t-2 border-dashed border-report-scheduled/60"
               style={{ bottom: `${globalSchedPct}%` }}
             >
@@ -155,17 +159,16 @@ export function ActivityBarsChart({ data, title }: { data: ActivityData[]; title
           )}
 
           {/* Column Grid */}
-          <div 
-            className="relative grid h-full gap-1 sm:gap-2 lg:gap-4" 
+          <div
+            className="relative grid h-full gap-1 sm:gap-2 lg:gap-4"
             style={{ gridTemplateColumns: `repeat(${data.length}, minmax(0, 1fr))` }}
-            ref={containerRef}
           >
             {data.map((d, i) => {
               const heightPct = Math.max(0, Math.min(100, (d.worked / maxVal) * 100));
-              
+
               let barColor = "bg-report-present"; // default present
               let hasBar = d.worked > 0;
-              
+
               // Half Day uses orange bar
               if (d.isHalfDay) {
                 barColor = "bg-report-halfday";
@@ -175,6 +178,17 @@ export function ActivityBarsChart({ data, title }: { data: ActivityData[]; title
                 barColor = "bg-report-present"; // green bar + amber cap overlay
               }
 
+              const staggerDelay = populatedIndices[i] >= 0 ? populatedIndices[i] * delayInterval : i * (delayInterval / 2);
+              const markerDelay = staggerDelay;
+
+              const shouldAnimate = entered && !reducedMotion;
+              const isInitial = !entered && !reducedMotion;
+
+              // We compute bar inline styles dynamically
+              // If reduced motion, always render the final state.
+              const barTransform = isInitial ? "translateY(14px) scaleY(0)" : "translateY(0) scaleY(1)";
+              const barOpacity = isInitial ? 0 : (hoveredIndex !== null && hoveredIndex !== i ? 0.4 : 1);
+
               return (
                 <div
                   key={i}
@@ -183,14 +197,18 @@ export function ActivityBarsChart({ data, title }: { data: ActivityData[]; title
                 >
                   {/* Working Bar Container */}
                   <div className="w-full flex-1 flex flex-col justify-end items-center relative z-10">
-                    
+
                     {hasBar ? (
                       <div
-                        className={`activity-bar-anim relative ${barBaseWidth} ${barMaxWidth} rounded-t-md ${barColor} shadow-sm transition-[opacity,filter] duration-200 overflow-hidden flex flex-col justify-start ${hoveredIndex !== null && hoveredIndex !== i ? 'opacity-40 grayscale-[30%]' : 'opacity-100'}`}
+                        className={`activity-bar-anim relative ${barBaseWidth} ${barMaxWidth} rounded-t-md ${barColor} shadow-sm overflow-hidden flex flex-col justify-start`}
                         style={{
                           height: `${heightPct}%`,
-                          transform: "scaleY(1)",
-                          transformOrigin: "bottom",
+                          transformOrigin: "bottom center",
+                          transform: barTransform,
+                          opacity: barOpacity,
+                          animation: shouldAnimate ? `bar-grow-settle 1800ms cubic-bezier(0.22, 1, 0.36, 1) both ${staggerDelay}ms` : 'none',
+                          filter: hoveredIndex !== null && hoveredIndex !== i ? 'grayscale(30%)' : 'none',
+                          transition: "opacity 200ms ease-out, filter 200ms ease-out"
                         }}
                       >
                         {/* Late Top Cap Indicator integrated as an OVERLAY to preserve bar geometry */}
@@ -201,11 +219,31 @@ export function ActivityBarsChart({ data, title }: { data: ActivityData[]; title
                     ) : (
                       /* Baseline Status Stripes for Absent / Pending */
                       <div className="absolute bottom-0 flex h-[24px] w-full items-end justify-center pb-1">
-                        {d.isAbsent && <div className={`status-marker h-1.5 w-full ${barMaxWidth} rounded-full bg-report-absent`} title="Absent" />}
-                        {d.isPending && <div className={`status-marker h-1.5 w-full ${barMaxWidth} rounded-full bg-slate-200 opacity-80`} title="Pending" />}
+                        {d.isAbsent && (
+                          <div
+                            className={`h-1.5 w-full ${barMaxWidth} rounded-full bg-report-absent`}
+                            title="Absent"
+                            style={{
+                              opacity: isInitial ? 0 : 1,
+                              transition: "opacity 400ms ease-out",
+                              transitionDelay: `${markerDelay}ms`
+                            }}
+                          />
+                        )}
+                        {d.isPending && (
+                          <div
+                            className={`h-1.5 w-full ${barMaxWidth} rounded-full bg-slate-200`}
+                            title="Pending"
+                            style={{
+                              opacity: isInitial ? 0 : 0.8,
+                              transition: "opacity 400ms ease-out",
+                              transitionDelay: `${markerDelay}ms`
+                            }}
+                          />
+                        )}
                       </div>
                     )}
-                    
+
                     {/* Baseline subtle track for aesthetic grounding */}
                     <div className={`absolute bottom-0 h-1 w-full ${barMaxWidth} rounded-full bg-slate-100 -z-10`}></div>
                   </div>
@@ -219,13 +257,13 @@ export function ActivityBarsChart({ data, title }: { data: ActivityData[]; title
                   {hoveredIndex === i && (
                     <div className="pointer-events-none absolute bottom-[calc(100%+12px)] left-1/2 z-50 mb-1 w-max -translate-x-1/2 rounded-lg bg-slate-900/95 px-3 py-2.5 text-xs text-white shadow-xl backdrop-blur-sm">
                       <div className="mb-2 border-b border-slate-700/50 pb-1.5 font-bold text-slate-100">{d.dateStr}</div>
-                      
+
                       <div className="mb-2 flex items-start gap-2">
                         <span className="text-slate-400">Status:</span>
                         <div className="flex flex-col font-semibold leading-tight gap-1">
                           {d.isAbsent && <span className="text-red-400">Absent</span>}
                           {d.isPending && <span className="text-slate-400">Pending</span>}
-                          
+
                           {d.isPresent && !d.isAbsent && (
                             <span className="text-emerald-400">Present</span>
                           )}
@@ -237,18 +275,18 @@ export function ActivityBarsChart({ data, title }: { data: ActivityData[]; title
                       {hasBar ? (
                         <div className="grid gap-1.5 mt-2">
                           <div className="flex justify-between gap-4 text-slate-300">
-                            <span>Worked:</span> 
+                            <span>Worked:</span>
                             <span className="font-semibold text-white">{formatDurationMinutes(d.worked)}</span>
                           </div>
                           {d.scheduled > 0 && (
                             <div className="flex justify-between gap-4 text-slate-400">
-                              <span>Scheduled:</span> 
+                              <span>Scheduled:</span>
                               <span>{formatDurationMinutes(d.scheduled)}</span>
                             </div>
                           )}
                           {d.overtime > 0 && (
                             <div className="flex justify-between gap-4 text-bie-300 mt-1 pt-1 border-t border-slate-700/50">
-                              <span>Overtime:</span> 
+                              <span>Overtime:</span>
                               <span className="font-semibold">{formatDurationMinutes(d.overtime)}</span>
                             </div>
                           )}
@@ -256,12 +294,12 @@ export function ActivityBarsChart({ data, title }: { data: ActivityData[]; title
                       ) : (
                         d.isAbsent && (
                           <div className="flex justify-between gap-4 text-slate-400 mt-2">
-                            <span>Worked:</span> 
+                            <span>Worked:</span>
                             <span>0 minutes</span>
                           </div>
                         )
                       )}
-                      
+
                       {/* Tooltip arrow */}
                       <div className="absolute -bottom-1 left-1/2 h-2.5 w-2.5 -translate-x-1/2 rotate-45 bg-slate-900/95"></div>
                     </div>

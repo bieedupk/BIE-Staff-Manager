@@ -323,14 +323,16 @@ export function ReportDashboard({
         <div className="grid gap-5 lg:grid-cols-[2fr_1fr] motion-safe:animate-fade-up opacity-0" style={{ animationDelay: '450ms' }}>
           {/* Primary Graph */}
           <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-            <ActivityBarsChart data={activityData} title={type === 'weekly' ? 'Weekly Attendance Activity' : type === 'monthly' ? 'Monthly Attendance Activity' : 'Yearly Attendance Activity'} />
+            <ActivityBarsChart data={activityData} title={type === 'weekly' ? 'Weekly Attendance Activity' : type === 'monthly' ? 'Monthly Attendance Activity' : 'Yearly Attendance Activity'} animationKey={animationKey} />
           </div>
 
           {/* Radial Gauge */}
           <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
             <AttendanceRateCard 
               rate={currentReport.ratios.attendanceRate} 
-              previousRate={previousReport.ratios.attendanceRate}
+              comparison={comparison.attendanceRate}
+              label={type === 'yearly' ? 'YTD Attendance' : type === 'monthly' ? 'MTD Attendance' : 'Weekly Attendance'}
+              animationKey={animationKey}
             />
           </div>
         </div>
@@ -343,12 +345,13 @@ export function ReportDashboard({
               halfDay={currentReport.totals.halfDays}
               absent={currentReport.totals.absentDays}
               eligible={currentReport.totals.eligibleDays}
+              animationKey={animationKey}
             />
           </div>
           
           {type !== "yearly" && (
             <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-              <PunctualityLineChart data={punctualityData} title="Check-in & Punctuality" />
+              <PunctualityLineChart data={punctualityData} title="Check-in & Punctuality" animationKey={animationKey} />
             </div>
           )}
         </div>
