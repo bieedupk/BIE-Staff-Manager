@@ -69,7 +69,10 @@ export default async function EmployeeAttendancePage({
     <>
       <PageHeader title="Attendance" subtitle="Check in, check out, and view attendance history by date." backHref="/employee/dashboard" />
       <AttendanceMessage success={resolvedSearchParams?.attendance_success} error={resolvedSearchParams?.attendance_error} />
-      <section className="rounded-lg border border-emerald-100 bg-white p-4 shadow-soft">
+      <section
+        className="rounded-lg border border-emerald-100 bg-white p-4 shadow-soft motion-safe:animate-fade-up opacity-0"
+        style={{ animationDelay: "0ms", animationFillMode: "forwards" }}
+      >
         <div className="flex items-start justify-between gap-3">
           <div>
             <h2 className="font-extrabold text-slate-950">Today - {formatDate(today)}</h2>
@@ -126,7 +129,10 @@ export default async function EmployeeAttendancePage({
         </div>
       </section>
 
-      <section className="mt-5 rounded-lg border border-emerald-100 bg-white p-4 shadow-soft">
+      <section
+        className="mt-5 rounded-lg border border-emerald-100 bg-white p-4 shadow-soft motion-safe:animate-fade-up opacity-0"
+        style={{ animationDelay: "150ms", animationFillMode: "forwards" }}
+      >
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 className="font-extrabold text-slate-950">

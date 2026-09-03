@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { UserCheck, UserX, Timer, CalendarDays, BriefcaseBusiness, Clock3, TrendingUp, Gauge } from "lucide-react";
 import { ProfileTabs } from "@/components/admin/profile-tabs";
 import { DepartmentBadges } from "@/components/common/department-badges";
 import { Avatar } from "@/components/ui/avatar";
@@ -76,7 +77,7 @@ export default async function AdminEmployeeAttendancePage({
     .order("work_date", { ascending: false });
 
   const actualRecords = attendanceData || [];
-  
+
   // Need to pass profile that matches what `buildCompleteTimelineWithAbsent` expects
   const minimalProfile = {
     id: employee.id,
@@ -86,7 +87,7 @@ export default async function AdminEmployeeAttendancePage({
     department_id: employee.department_id,
     designation: employee.designation
   };
-  
+
   const completeTimeline = buildCompleteTimelineWithAbsent(
     actualRecords as any,
     minimalProfile as any,
@@ -151,7 +152,10 @@ export default async function AdminEmployeeAttendancePage({
 
         <div className="grid gap-5">
           {/* Filters */}
-          <div className="flex flex-wrap items-center gap-3 rounded-lg border border-emerald-100 bg-white p-4 shadow-soft">
+          <div
+            className="flex flex-wrap items-center gap-3 rounded-lg border border-emerald-100 bg-white p-4 shadow-soft motion-safe:animate-fade-up opacity-0"
+            style={{ animationDelay: "0ms", animationFillMode: "forwards" }}
+          >
             <h2 className="text-sm font-bold text-slate-900">Date Range Filter:</h2>
             <form className="flex flex-wrap items-center gap-2">
               <input
@@ -179,18 +183,21 @@ export default async function AdminEmployeeAttendancePage({
 
           {/* Summary Cards */}
           <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <MetricCard label="Present Days" value={report.totals.presentDays} />
-            <MetricCard label="Absent Days" value={report.totals.absentDays} />
-            <MetricCard label="Late Arrivals" value={report.totals.lateDays} />
-            <MetricCard label="Half Days" value={report.totals.halfDays} />
-            <MetricCard label="Total Work Hours" value={formatDurationMinutes(report.totals.totalWorkingMinutes)} />
-            <MetricCard label="Total Overtime" value={formatDurationMinutes(report.totals.totalOvertimeMinutes)} />
-            <MetricCard label="Attendance Rate" value={`${Math.round(report.ratios.attendanceRate)}%`} />
-            <MetricCard label="Punctuality Rate" value={`${Math.round(report.ratios.punctualityRate)}%`} />
+            <MetricCard label="Present Days" value={report.totals.presentDays} icon={UserCheck} accent="emerald" delay="50ms" />
+            <MetricCard label="Absent Days" value={report.totals.absentDays} icon={UserX} accent="red" delay="100ms" />
+            <MetricCard label="Late Arrivals" value={report.totals.lateDays} icon={Timer} accent="amber" delay="150ms" />
+            <MetricCard label="Half Days" value={report.totals.halfDays} icon={CalendarDays} accent="orange" delay="200ms" />
+            <MetricCard label="Total Work Hours" value={formatDurationMinutes(report.totals.totalWorkingMinutes)} icon={BriefcaseBusiness} accent="blue" delay="250ms" />
+            <MetricCard label="Total Overtime" value={formatDurationMinutes(report.totals.totalOvertimeMinutes)} icon={Clock3} accent="slate" delay="300ms" />
+            <MetricCard label="Attendance Rate" value={`${Math.round(report.ratios.attendanceRate)}%`} icon={TrendingUp} accent="emerald" delay="350ms" />
+            <MetricCard label="Punctuality Rate" value={`${Math.round(report.ratios.punctualityRate)}%`} icon={Gauge} accent="emerald" delay="400ms" />
           </section>
 
           {/* History List */}
-          <section className="rounded-lg border border-emerald-100 bg-white shadow-soft">
+          <section
+            className="rounded-lg border border-emerald-100 bg-white shadow-soft motion-safe:animate-fade-up opacity-0"
+            style={{ animationDelay: "450ms", animationFillMode: "forwards" }}
+          >
             <div className="border-b border-emerald-100 px-5 py-4">
               <h2 className="text-base font-extrabold text-slate-950">Attendance History</h2>
               <p className="text-xs font-medium text-slate-500">
@@ -269,11 +276,44 @@ export default async function AdminEmployeeAttendancePage({
   );
 }
 
-function MetricCard({ label, value }: { label: string; value: React.ReactNode }) {
+function MetricCard({
+  icon: Icon,
+  label,
+  value,
+  accent = "slate",
+  delay = "0ms"
+}: {
+  icon: any;
+  label: string;
+  value: React.ReactNode;
+  accent?: "emerald" | "red" | "amber" | "orange" | "blue" | "slate";
+  delay?: string;
+}) {
+  const iconColors = {
+    emerald: "text-emerald-600 bg-emerald-100",
+    red: "text-red-600 bg-red-100",
+    amber: "text-amber-600 bg-amber-100",
+    orange: "text-orange-600 bg-orange-100",
+    blue: "text-blue-600 bg-blue-100",
+    slate: "text-slate-600 bg-slate-100"
+  };
+
   return (
-    <div className="rounded-lg border border-emerald-100 bg-white p-4 shadow-soft">
-      <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">{label}</p>
-      <p className="mt-1 text-xl font-extrabold text-bie-800">{value}</p>
+    <div
+      className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm flex flex-col justify-between motion-safe:animate-fade-up opacity-0"
+      style={{ animationDelay: delay, animationFillMode: "forwards" }}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex items-center gap-3">
+          <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${iconColors[accent]}`}>
+            <Icon className="h-5 w-5" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="truncate text-[11px] font-bold text-slate-500 uppercase tracking-wider">{label}</p>
+            <p className="text-xl font-extrabold text-slate-900 leading-tight">{value}</p>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

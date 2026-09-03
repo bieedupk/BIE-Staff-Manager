@@ -83,7 +83,6 @@ function StatusRow({ label, value, total, pct, colorClass, isSubset = false, ani
     >
       <div className="flex justify-between text-xs">
         <span className="font-semibold text-slate-700">
-          {isSubset && <span className="mr-1.5 font-normal text-slate-400">↳</span>}
           {label}
         </span>
         <span className="text-slate-500">
