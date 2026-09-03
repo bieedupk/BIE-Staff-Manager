@@ -53,23 +53,26 @@ export default async function EmployeeDashboardPage({
 
   return (
     <>
-      <PageHeader title={t("dashboard", locale)} subtitle={t("employeeDashboardSubtitle", locale)} />
-      <AttendanceMessage success={resolvedSearchParams?.attendance_success} error={resolvedSearchParams?.attendance_error} />
+      <div className="motion-safe:animate-fade-up opacity-0" style={{ animationDelay: '0ms', animationFillMode: 'forwards' }}>
+        <PageHeader title={t("dashboard", locale)} subtitle={t("employeeDashboardSubtitle", locale)} />
+        <AttendanceMessage success={resolvedSearchParams?.attendance_success} error={resolvedSearchParams?.attendance_error} />
+      </div>
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="Today tasks" value={todayTasks.length} hint={formatDate(today)} href="/employee/tasks" icon={CalendarClock} />
-        <StatCard label="Pending tasks" value={pendingTasks.length} href="/employee/tasks" icon={ListTodo} />
-        <StatCard label="Completed tasks" value={completedTasks.length} href="/employee/tasks" icon={CheckCircle2} />
+        <StatCard label="Today tasks" value={todayTasks.length} href="/employee/tasks" icon={CalendarClock} accent="blue" animationDelay={50} />
+        <StatCard label="Pending tasks" value={pendingTasks.length} href="/employee/tasks" icon={ListTodo} accent="amber" animationDelay={100} />
+        <StatCard label="Completed tasks" value={completedTasks.length} href="/employee/tasks" icon={CheckCircle2} accent="emerald" animationDelay={150} />
         <StatCard
           label="Daily report"
           value={dailyReport ? "Submitted" : "Missing"}
-          hint={formatDate(today)}
           href="/employee/daily-report"
           icon={dailyReport ? ClipboardCheck : ClipboardX}
+          accent={dailyReport ? "emerald" : "red"}
+          animationDelay={200}
         />
       </section>
 
       <section className="mt-5 grid gap-5 xl:grid-cols-2">
-        <div className="rounded-lg border border-emerald-100 bg-white p-4 shadow-soft">
+        <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm motion-safe:animate-fade-up opacity-0" style={{ animationDelay: '250ms', animationFillMode: 'forwards' }}>
           <div className="flex items-start justify-between gap-3">
             <div>
               <h2 className="font-extrabold text-slate-950">Today Attendance</h2>
@@ -117,7 +120,7 @@ export default async function EmployeeDashboardPage({
               <SubmitButton
                 disabled={!todayAttendance?.check_in_at || Boolean(todayAttendance?.check_out_at)}
                 pendingText="Checking out..."
-                className="min-h-11 w-full rounded-lg border border-emerald-200 px-4 font-extrabold text-bie-700 disabled:opacity-50 transition hover:bg-emerald-50"
+                className="min-h-11 w-full rounded-lg border border-slate-200 bg-slate-50 px-4 font-extrabold text-slate-700 disabled:opacity-50 transition hover:bg-slate-100"
               >
                 {t("checkOut", locale)}
               </SubmitButton>
@@ -125,39 +128,47 @@ export default async function EmployeeDashboardPage({
           </div>
         </div>
 
-        <div className="rounded-lg border border-emerald-100 bg-white p-4 shadow-soft">
+        <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm motion-safe:animate-fade-up opacity-0" style={{ animationDelay: '300ms', animationFillMode: 'forwards' }}>
           <div>
             <h2 className="font-extrabold text-slate-950">Quick Actions</h2>
             <p className="mt-1 text-sm font-medium text-slate-500">Shortcuts to manage your daily tasks, reports, and leaves.</p>
           </div>
           <div className="mt-4 grid gap-2.5 sm:grid-cols-2">
             <Link
-              className="relative flex items-center justify-between overflow-hidden rounded-lg border border-emerald-100 bg-emerald-50 p-3.5 text-sm font-bold text-bie-700 transition hover:border-emerald-200 hover:bg-emerald-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bie-700 focus-visible:ring-offset-2"
+              className="flex items-center gap-3 rounded-lg border border-slate-100 bg-slate-50 p-3.5 transition hover:border-slate-200 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bie-700 focus-visible:ring-offset-2"
               href="/employee/tasks"
             >
-              <span>Update tasks</span>
-              <ListTodo className="h-5 w-5 text-emerald-600" aria-hidden="true" />
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-100 text-blue-600">
+                <ListTodo className="h-5 w-5" aria-hidden="true" />
+              </div>
+              <span className="font-bold text-slate-700">Update tasks</span>
             </Link>
             <Link
-              className="relative flex items-center justify-between overflow-hidden rounded-lg border border-emerald-100 bg-emerald-50 p-3.5 text-sm font-bold text-bie-700 transition hover:border-emerald-200 hover:bg-emerald-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bie-700 focus-visible:ring-offset-2"
+              className="flex items-center gap-3 rounded-lg border border-slate-100 bg-slate-50 p-3.5 transition hover:border-slate-200 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bie-700 focus-visible:ring-offset-2"
               href="/employee/daily-report"
             >
-              <span>Submit daily report</span>
-              <ClipboardCheck className="h-5 w-5 text-emerald-600" aria-hidden="true" />
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-emerald-100 text-emerald-600">
+                <ClipboardCheck className="h-5 w-5" aria-hidden="true" />
+              </div>
+              <span className="font-bold text-slate-700">Submit daily report</span>
             </Link>
             <Link
-              className="relative flex items-center justify-between overflow-hidden rounded-lg border border-emerald-100 bg-emerald-50 p-3.5 text-sm font-bold text-bie-700 transition hover:border-emerald-200 hover:bg-emerald-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bie-700 focus-visible:ring-offset-2"
+              className="flex items-center gap-3 rounded-lg border border-slate-100 bg-slate-50 p-3.5 transition hover:border-slate-200 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bie-700 focus-visible:ring-offset-2"
               href="/employee/leave"
             >
-              <span>Request leave</span>
-              <CalendarClock className="h-5 w-5 text-emerald-600" aria-hidden="true" />
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-teal-100 text-teal-600">
+                <CalendarClock className="h-5 w-5" aria-hidden="true" />
+              </div>
+              <span className="font-bold text-slate-700">Request leave</span>
             </Link>
             <Link
-              className="relative flex items-center justify-between overflow-hidden rounded-lg border border-emerald-100 bg-emerald-50 p-3.5 text-sm font-bold text-bie-700 transition hover:border-emerald-200 hover:bg-emerald-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bie-700 focus-visible:ring-offset-2"
+              className="flex items-center gap-3 rounded-lg border border-slate-100 bg-slate-50 p-3.5 transition hover:border-slate-200 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bie-700 focus-visible:ring-offset-2"
               href="/employee/attendance"
             >
-              <span>View attendance history</span>
-              <Clock className="h-5 w-5 text-emerald-600" aria-hidden="true" />
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-amber-100 text-amber-600">
+                <Clock className="h-5 w-5" aria-hidden="true" />
+              </div>
+              <span className="font-bold text-slate-700">View attendance history</span>
             </Link>
           </div>
         </div>

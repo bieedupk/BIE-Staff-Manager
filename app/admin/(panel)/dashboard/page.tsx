@@ -73,7 +73,7 @@ export default async function AdminDashboardPage() {
 
   return (
     <>
-      <section className="mb-5 grid gap-3 md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] md:items-start">
+      <section className="mb-5 grid gap-3 md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] md:items-start motion-safe:animate-fade-up opacity-0" style={{ animationDelay: '0ms', animationFillMode: 'forwards' }}>
         <div>
           <h1 className="text-2xl font-extrabold tracking-tight text-slate-950">{t("dashboard", locale)}</h1>
           <p className="mt-1 max-w-3xl text-sm font-medium text-slate-500">{t("adminDashboardSubtitle", locale)}</p>
@@ -89,20 +89,18 @@ export default async function AdminDashboardPage() {
           />
         </div>
       </section>
-      <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-        <StatCard label="Active employees" value={activeEmployeeCount} href="/admin/employees" icon={UserCheck} />
-        <StatCard label="Total staff records" value={staffRecords.length} href="/admin/employees" icon={UsersRound} />
-        <StatCard label={t("presentToday", locale)} value={presentToday} href="/admin/attendance?status=present" icon={UserCheck} />
-        <StatCard label={t("absentToday", locale)} value={absentToday} href="/admin/attendance?status=absent" icon={UserX} />
-        <StatCard label={t("lateToday", locale)} value={lateToday} href="/admin/attendance?status=late" icon={Clock} />
-        <StatCard label="Half-day today" value={halfDayToday} href="/admin/attendance?status=half-day" icon={Timer} />
-        <StatCard label="Reports submitted today" value={reportEmployees.size} hint={formatDate(today)} href="/admin/daily-reports" icon={ClipboardCheck} />
-        <StatCard label="Reports missing today" value={missingReports} href="/admin/daily-reports" icon={ClipboardX} />
-        <StatCard label={t("pendingTasks", locale)} value={pendingTasks.count ?? 0} href="/admin/tasks" icon={ListTodo} />
-        <StatCard label={t("pendingLeaves", locale)} value={pendingLeaves.count ?? 0} href="/admin/leaves" icon={CalendarClock} />
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <StatCard label="Active employees" value={activeEmployeeCount} href="/admin/employees" icon={UserCheck} accent="emerald" animationDelay={50} />
+        <StatCard label="Total staff records" value={staffRecords.length} href="/admin/employees" icon={UsersRound} accent="slate" animationDelay={100} />
+        <StatCard label={t("presentToday", locale)} value={presentToday} href="/admin/attendance?status=present" icon={UserCheck} accent="emerald" animationDelay={150} />
+        <StatCard label={t("absentToday", locale)} value={absentToday} href="/admin/attendance?status=absent" icon={UserX} accent="red" animationDelay={200} />
+        <StatCard label={t("lateToday", locale)} value={lateToday} href="/admin/attendance?status=late" icon={Clock} accent="amber" animationDelay={250} />
+        <StatCard label="Half-day today" value={halfDayToday} href="/admin/attendance?status=half-day" icon={Timer} accent="orange" animationDelay={300} />
+        <StatCard label="Reports submitted today" value={reportEmployees.size} href="/admin/daily-reports" icon={ClipboardCheck} accent="emerald" animationDelay={350} />
+        <StatCard label={t("pendingTasks", locale)} value={pendingTasks.count ?? 0} href="/admin/tasks" icon={ListTodo} accent="blue" animationDelay={400} />
       </section>
 
-      <section className="mt-6 rounded-lg border border-emerald-100 bg-white p-4 shadow-soft">
+      <section className="mt-6 rounded-xl border border-slate-200 bg-white p-5 shadow-sm motion-safe:animate-fade-up opacity-0" style={{ animationDelay: '450ms', animationFillMode: 'forwards' }}>
         <div className="flex items-start justify-between gap-4">
           <div>
             <h2 className="font-extrabold text-slate-950">Today&apos;s Action Required</h2>
@@ -110,18 +108,15 @@ export default async function AdminDashboardPage() {
           </div>
           <Link
             href="/admin/attendance"
-            className="shrink-0 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-bold text-bie-700 transition hover:bg-emerald-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bie-700 focus-visible:ring-offset-2"
+            className="shrink-0 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-bold text-slate-700 transition hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bie-700 focus-visible:ring-offset-2"
           >
             View Attendance
           </Link>
         </div>
-        <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-          <ActionCount label="Absent employees" value={absentToday} href="/admin/attendance?status=absent" icon={UserX} />
-          <ActionCount label="Late employees" value={lateToday} href="/admin/attendance?status=late" icon={Clock} />
-          <ActionCount label="Half-day employees" value={halfDayToday} href="/admin/attendance?status=half-day" icon={Timer} />
-          <ActionCount label="Missing daily reports" value={missingReports} href="/admin/daily-reports" icon={ClipboardX} />
-          <ActionCount label="Pending leave requests" value={pendingLeaves.count ?? 0} href="/admin/leaves" icon={CalendarClock} />
-          <ActionCount label="Overdue tasks" value={overdueTasks.count ?? 0} href="/admin/tasks" icon={CalendarX} />
+        <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          <ActionCount label="Missing daily reports" value={missingReports} href="/admin/daily-reports" icon={ClipboardX} accent="red" />
+          <ActionCount label="Pending leave requests" value={pendingLeaves.count ?? 0} href="/admin/leaves" icon={CalendarClock} accent="teal" />
+          <ActionCount label="Overdue tasks" value={overdueTasks.count ?? 0} href="/admin/tasks" icon={CalendarX} accent="red" />
         </div>
       </section>
 
@@ -129,21 +124,32 @@ export default async function AdminDashboardPage() {
   );
 }
 
-function ActionCount({ label, value, href, icon: Icon }: { label: string; value: number; href: string; icon: LucideIcon }) {
+function ActionCount({ label, value, href, icon: Icon, accent = "slate" }: { label: string; value: number; href: string; icon: LucideIcon; accent?: "emerald" | "red" | "amber" | "orange" | "blue" | "slate" | "teal" }) {
+  const iconColors = {
+    emerald: "text-emerald-600 bg-emerald-100",
+    red: "text-red-600 bg-red-100",
+    amber: "text-amber-600 bg-amber-100",
+    orange: "text-orange-600 bg-orange-100",
+    blue: "text-blue-600 bg-blue-100",
+    slate: "text-slate-600 bg-slate-100",
+    teal: "text-teal-600 bg-teal-100",
+  };
+
   return (
     <Link
       href={href}
-      className="relative flex min-h-20 items-center justify-between gap-3 overflow-hidden rounded-lg border border-emerald-100 bg-emerald-50 p-4 transition hover:border-emerald-200 hover:bg-emerald-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bie-700 focus-visible:ring-offset-2"
+      className="flex h-full min-h-[116px] w-full flex-col rounded-xl border border-slate-100 bg-slate-50 px-5 py-4 transition hover:border-slate-200 hover:bg-slate-100 hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bie-700 focus-visible:ring-offset-2"
     >
-      <Icon
-        className="absolute right-3 top-1/2 -translate-y-1/2 text-emerald-200"
-        size={56}
-        strokeWidth={1.25}
-        aria-hidden="true"
-      />
-      <div className="relative">
-        <p className="text-sm font-bold text-slate-700">{label}</p>
-        <p className="mt-1 text-2xl font-extrabold text-bie-700">{value}</p>
+      <p className="w-full text-left text-xs font-bold text-slate-500 uppercase tracking-wider leading-snug">
+        {label}
+      </p>
+      <div className="mt-1 flex flex-1 w-full items-center justify-start gap-4">
+        <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl ${iconColors[accent]}`}>
+          <Icon className="h-6 w-6" aria-hidden="true" />
+        </div>
+        <p className="text-2xl sm:text-[28px] font-extrabold text-slate-900 leading-none">
+          {value}
+        </p>
       </div>
     </Link>
   );
@@ -159,11 +165,16 @@ function OfficeTiming({
   lateThresholdTime: string;
 }) {
   return (
-    <aside className="rounded-lg border border-emerald-100 bg-white px-3 py-2 text-sm shadow-soft">
-      <p className="font-extrabold text-slate-950">
-        Office {formatOfficeTime(officeStartTime)} - {formatOfficeTime(officeEndTime)}
-      </p>
-      <p className="mt-0.5 font-semibold text-slate-500">Late after {formatOfficeTime(lateThresholdTime)}</p>
+    <aside className="flex items-center gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-sm">
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-slate-100 text-slate-500">
+        <Clock className="h-4 w-4" aria-hidden="true" />
+      </div>
+      <div>
+        <p className="text-xs font-extrabold text-slate-900">
+          Office {formatOfficeTime(officeStartTime)} - {formatOfficeTime(officeEndTime)}
+        </p>
+        <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mt-0.5">Late after {formatOfficeTime(lateThresholdTime)}</p>
+      </div>
     </aside>
   );
 }
