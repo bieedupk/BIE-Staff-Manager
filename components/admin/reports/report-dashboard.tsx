@@ -2,7 +2,7 @@
 
 import React from "react";
 import Link from "next/link";
-import { CalendarCheck, UserCheck, UserX, Clock3, Timer, Gauge, BriefcaseBusiness, TrendingUp, TrendingDown, Minus } from "lucide-react";
+import { CalendarCheck, UserCheck, UserX, Clock3, Timer, Gauge, BriefcaseBusiness, TrendingUp, TrendingDown, Minus, Download } from "lucide-react";
 import { formatDurationMinutes, formatDate, formatTime, todayISOInTimezone } from "@/lib/utils";
 import { ActivityBarsChart } from "./activity-bars-chart";
 import { PunctualityLineChart } from "./punctuality-line-chart";
@@ -225,6 +225,12 @@ export function ReportDashboard({
             <button type="submit" className="rounded-md bg-bie-700 px-4 py-1 text-sm font-semibold text-white transition hover:bg-bie-800">
               Go
             </button>
+            <a
+              href={`/api/admin/employees/${employeeId}/reports/pdf?type=${type}${resolvedParams.date ? `&date=${resolvedParams.date}` : ''}${resolvedParams.month ? `&month=${resolvedParams.month}` : ''}${resolvedParams.year ? `&year=${resolvedParams.year}` : ''}`}
+              className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-1 text-sm font-bold text-slate-700 hover:bg-slate-50 transition"
+            >
+              <Download className="h-4 w-4" /> Download PDF
+            </a>
           </form>
           <div className="text-right">
             <p className="text-sm font-bold text-slate-900">{reportLabelMain}</p>

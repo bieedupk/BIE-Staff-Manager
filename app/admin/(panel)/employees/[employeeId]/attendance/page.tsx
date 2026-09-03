@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { UserCheck, UserX, Timer, CalendarDays, BriefcaseBusiness, Clock3, TrendingUp, Gauge } from "lucide-react";
+import { UserCheck, UserX, Timer, CalendarDays, BriefcaseBusiness, Clock3, TrendingUp, Gauge, Download } from "lucide-react";
 import { ProfileTabs } from "@/components/admin/profile-tabs";
 import { DepartmentBadges } from "@/components/common/department-badges";
 import { Avatar } from "@/components/ui/avatar";
@@ -179,6 +179,14 @@ export default async function AdminEmployeeAttendancePage({
               </button>
               <span className="ms-1 text-xs font-semibold text-slate-500">{daysLabel}</span>
             </form>
+            <div className="ml-auto">
+              <a
+                href={`/api/admin/employees/${employee.id}/attendance/pdf?from=${from}&to=${to}`}
+                className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-bold text-slate-700 hover:bg-slate-50 transition"
+              >
+                <Download className="h-4 w-4" /> Download PDF
+              </a>
+            </div>
           </div>
 
           {/* Summary Cards */}

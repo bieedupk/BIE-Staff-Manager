@@ -3,6 +3,7 @@ import { SubmitButton } from "@/components/ui/submit-button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { Download } from "lucide-react";
 import { attendanceDisplayStatus, deriveAttendanceFlags, getTodayAttendanceForEmployee, getRecentAttendanceForEmployee, buildCompleteTimelineWithAbsent } from "@/lib/attendance";
 import { requireEmployeeProfile } from "@/lib/auth";
 import { getOrganizationSettings } from "@/lib/organization-settings";
@@ -143,14 +144,22 @@ export default async function EmployeeAttendancePage({
               <p className="text-sm font-medium text-slate-500">Last 10 days of records, latest first.</p>
             )}
           </div>
-          {!isShowingRecent && (
+          <div className="flex items-center gap-2">
+            {!isShowingRecent && (
+              <a
+                href="/employee/attendance"
+                className="inline-block rounded-lg bg-slate-100 px-3 py-2 text-sm font-bold text-slate-700 hover:bg-slate-200"
+              >
+                Clear Filter
+              </a>
+            )}
             <a
-              href="/employee/attendance"
-              className="inline-block rounded-lg bg-slate-100 px-3 py-2 text-sm font-bold text-slate-700 hover:bg-slate-200"
+              href={`/api/employee/attendance/pdf${historyDateSelected ? `?history_date=${historyDate}` : ''}`}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50 transition"
             >
-              Clear Filter
+              <Download className="h-4 w-4" /> Download PDF
             </a>
-          )}
+          </div>
         </div>
         <form className="mt-4 grid gap-2 sm:max-w-sm">
           <label className="grid gap-1 text-sm font-bold text-slate-700">
