@@ -54,15 +54,32 @@ export function ActivityBarsChart({ data, title, animationKey }: { data: Activit
   const highestDataMins = Math.max(...data.map(d => Math.max(d.worked, d.scheduled)));
   const baseMax = Math.max(8 * 60, highestDataMins);
 
-  // Modest headroom: add 60 minutes and round up to the nearest 120 (2 hours)
-  const maxVal = Math.ceil((baseMax + 60) / 120) * 120;
+  // Calculate needed max in hours with modest headroom
+  const neededMaxHours = (baseMax + 60) / 60;
+
+  // Aim for ~5 intervals
+  const rawStepHours = neededMaxHours / 5;
+
+  // Nice rounded hour steps
+  const niceSteps = [2, 4, 10, 20, 25, 50, 60, 100, 200, 250, 500, 1000];
+  let stepHours = niceSteps[niceSteps.length - 1]; // fallback
+  for (const step of niceSteps) {
+    if (rawStepHours <= step) {
+      stepHours = step;
+      break;
+    }
+  }
+
+  // Round chart maximum upward to the selected step
+  const maxValHours = Math.ceil(neededMaxHours / stepHours) * stepHours;
+  const maxVal = maxValHours * 60;
 
   // Use the max scheduled duration as the chart-wide reference line
   const maxScheduled = Math.max(...data.map(d => d.scheduled));
   const globalSchedPct = Math.max(1, Math.min(100, (maxScheduled / maxVal) * 100));
 
   // Determine Y-axis ticks
-  const stepMinutes = maxVal > 12 * 60 ? 4 * 60 : 2 * 60;
+  const stepMinutes = stepHours * 60;
   const yTicks = [];
   for (let m = 0; m <= maxVal; m += stepMinutes) {
     yTicks.push(m);
@@ -119,7 +136,7 @@ export function ActivityBarsChart({ data, title, animationKey }: { data: Activit
       <div className="relative flex flex-1 w-full mx-auto max-w-4xl" dir="ltr" onMouseLeave={() => setHoveredIndex(null)}>
 
         {/* Y-Axis scale */}
-        <div className="w-10 shrink-0 relative border-r border-slate-100 flex flex-col justify-between py-0 text-[10px] font-medium text-slate-400">
+        <div className="w-12 shrink-0 relative border-r border-slate-100 flex flex-col justify-between py-0 text-[10px] font-medium text-slate-400">
           {yTicks.map(m => {
             const yPct = (m / maxVal) * 100;
             return (
