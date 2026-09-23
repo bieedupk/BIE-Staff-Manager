@@ -7,13 +7,16 @@ type StatusPanelProps = {
   late: number;
   halfDay: number;
   absent: number;
+  leave: number;
   eligible: number;
   animationKey?: string;
 };
 
-export function ReportStatusPanel({ present, late, halfDay, absent, eligible, animationKey }: StatusPanelProps) {
-  const presentPct = eligible > 0 ? (present / eligible) * 100 : 0;
-  const absentPct = eligible > 0 ? (absent / eligible) * 100 : 0;
+export function ReportStatusPanel({ present, late, halfDay, absent, leave, eligible, animationKey }: StatusPanelProps) {
+  const finalizedDays = present + absent + leave;
+  const presentPct = finalizedDays > 0 ? (present / finalizedDays) * 100 : 0;
+  const absentPct = finalizedDays > 0 ? (absent / finalizedDays) * 100 : 0;
+  const leavePct = finalizedDays > 0 ? (leave / finalizedDays) * 100 : 0;
 
   const latePct = present > 0 ? (late / present) * 100 : 0;
   const halfDayPct = present > 0 ? (halfDay / present) * 100 : 0;
@@ -24,8 +27,11 @@ export function ReportStatusPanel({ present, late, halfDay, absent, eligible, an
       <p className="mb-4 text-xs text-slate-500">Late and Half Day are subsets of Present attendance.</p>
 
       <div className="flex flex-col gap-4 flex-1 justify-center">
-        <StatusRow label="Present" value={present} total={eligible} pct={presentPct} colorClass="bg-report-present" animationKey={animationKey} delay={0} />
-        <StatusRow label="Absent" value={absent} total={eligible} pct={absentPct} colorClass="bg-report-absent" animationKey={animationKey} delay={120} />
+        <StatusRow label="Present" value={present} total={finalizedDays} pct={presentPct} colorClass="bg-report-present" animationKey={animationKey} delay={0} />
+        <StatusRow label="Absent" value={absent} total={finalizedDays} pct={absentPct} colorClass="bg-report-absent" animationKey={animationKey} delay={120} />
+        {leave > 0 && (
+          <StatusRow label="Leave" value={leave} total={finalizedDays} pct={leavePct} colorClass="bg-slate-400" animationKey={animationKey} delay={180} />
+        )}
 
         <div className="my-1 border-t border-dashed border-slate-200"></div>
 

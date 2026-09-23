@@ -55,20 +55,42 @@ export default async function AdminDashboardPage() {
   const staffRecords = employees.data ?? [];
   const activeEmployees = staffRecords.filter((employee) => employee.role === "employee" && employee.status === "active");
   const activeEmployeeIds = new Set(activeEmployees.map((employee) => employee.id));
+
+  const { getApprovedLeaveDates } = await import("@/lib/attendance");
+  const approvedLeavesMap = await getApprovedLeaveDates(Array.from(activeEmployeeIds), today, today);
+
   const activeAttendanceToday = (attendanceToday.data ?? []).filter((item) => activeEmployeeIds.has(item.employee_id));
   const activeAttendanceEmployeeIds = new Set(activeAttendanceToday.map((item) => item.employee_id));
   const activeAttendanceFlags = activeAttendanceToday.map((item) => deriveAttendanceFlags(item, settings));
   const activeEmployeeCount = activeEmployees.length;
+
   const presentToday = activeAttendanceFlags.filter((flags) => flags.isPresent).length;
   const lateToday = activeAttendanceFlags.filter((flags) => flags.isLate).length;
   const halfDayToday = activeAttendanceFlags.filter((flags) => flags.isHalfDay).length;
   const reportEmployees = new Set((reportsToday.data ?? []).filter((item) => activeEmployeeIds.has(item.employee_id)).map((item) => item.employee_id));
   const missingReports = Math.max(activeEmployeeCount - reportEmployees.size, 0);
   const officeEndedToday = isOfficeHoursEnded(settings);
-  const actualAbsentToday = activeAttendanceFlags.filter((flags) => flags.isAbsent).length;
+
+  // Actually absent today (has a record saying Absent, and NOT on leave)
+  const actualAbsentToday = activeAttendanceToday.filter((item, i) => {
+    const isLeave = approvedLeavesMap.get(item.employee_id)?.has(today);
+    return activeAttendanceFlags[i].isAbsent && !isLeave;
+  }).length;
+
+  // Actual leave today (either marked as leave or has approved leave and no present record)
+  const leaveToday = activeEmployees.filter((employee) => {
+    const isLeave = approvedLeavesMap.get(employee.id)?.has(today);
+    const index = activeAttendanceToday.findIndex((a) => a.employee_id === employee.id);
+    if (index !== -1) {
+      return activeAttendanceFlags[index].isLeave || (isLeave && !activeAttendanceFlags[index].isPresent);
+    }
+    return isLeave;
+  }).length;
+
   const missingAbsentToday = officeEndedToday
-    ? activeEmployees.filter((employee) => !activeAttendanceEmployeeIds.has(employee.id)).length
+    ? activeEmployees.filter((employee) => !activeAttendanceEmployeeIds.has(employee.id) && !approvedLeavesMap.get(employee.id)?.has(today)).length
     : 0;
+
   const absentToday = actualAbsentToday + missingAbsentToday;
 
   return (
@@ -94,6 +116,7 @@ export default async function AdminDashboardPage() {
         <StatCard label="Total staff records" value={staffRecords.length} href="/admin/employees" icon={UsersRound} accent="slate" animationDelay={100} />
         <StatCard label={t("presentToday", locale)} value={presentToday} href="/admin/attendance?status=present" icon={UserCheck} accent="emerald" animationDelay={150} />
         <StatCard label={t("absentToday", locale)} value={absentToday} href="/admin/attendance?status=absent" icon={UserX} accent="red" animationDelay={200} />
+        <StatCard label="On Leave Today" value={leaveToday} href="/admin/attendance?status=leave" icon={CalendarClock} accent="slate" animationDelay={225} />
         <StatCard label={t("lateToday", locale)} value={lateToday} href="/admin/attendance?status=late" icon={Clock} accent="amber" animationDelay={250} />
         <StatCard label="Half-day today" value={halfDayToday} href="/admin/attendance?status=half-day" icon={Timer} accent="orange" animationDelay={300} />
         <StatCard label="Reports submitted today" value={reportEmployees.size} href="/admin/daily-reports" icon={ClipboardCheck} accent="emerald" animationDelay={350} />

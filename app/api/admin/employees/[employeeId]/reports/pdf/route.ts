@@ -3,7 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getOrganizationSettings } from "@/lib/organization-settings";
 import { getEmployeeDepartmentNames } from "@/lib/employee-departments";
 import { todayISOInTimezone, formatDurationMinutes, formatDate } from "@/lib/utils";
-import { buildCompleteTimelineWithAbsent } from "@/lib/attendance";
+import { buildCompleteTimelineWithAbsent, getApprovedLeaveDates } from "@/lib/attendance";
 import { buildAttendanceReport, getWeeklyPeriod, getMonthlyPeriod, getYearlyPeriod, compareAttendanceReports } from "@/lib/attendance-report";
 import { buildAttendanceSummaryPdf } from "@/lib/attendance-summary-pdf";
 
@@ -79,15 +79,19 @@ export async function GET(
     const minDate = periodInfo.previous.from;
     const maxDate = periodInfo.current.to;
 
-    const { data: rawRecords } = await supabase
-      .from("attendance")
-      .select("*")
-      .eq("employee_id", employee.id)
-      .gte("work_date", minDate)
-      .lte("work_date", maxDate)
-      .order("work_date", { ascending: false });
+    const [rawRecordsRes, approvedLeavesMap] = await Promise.all([
+      supabase
+        .from("attendance")
+        .select("*")
+        .eq("employee_id", employee.id)
+        .gte("work_date", minDate)
+        .lte("work_date", maxDate)
+        .order("work_date", { ascending: false }),
+      getApprovedLeaveDates([employee.id], minDate, maxDate)
+    ]);
 
-    const actualRecords = (rawRecords || []);
+    const actualRecords = (rawRecordsRes.data || []);
+    const employeeLeaves = approvedLeavesMap.get(employee.id) || new Set();
 
     const minimalProfile = {
       id: employee.id,
@@ -103,7 +107,8 @@ export async function GET(
       minimalProfile as any,
       periodInfo.current.from,
       periodInfo.current.to,
-      orgSettings
+      orgSettings,
+      employeeLeaves
     );
     const currentReport = buildAttendanceReport(currentTimeline, periodInfo.current.from, periodInfo.current.to, orgSettings);
 
@@ -112,7 +117,8 @@ export async function GET(
       minimalProfile as any,
       periodInfo.previous.from,
       periodInfo.previous.to,
-      orgSettings
+      orgSettings,
+      employeeLeaves
     );
     const previousReport = buildAttendanceReport(previousTimeline, periodInfo.previous.from, periodInfo.previous.to, orgSettings);
 
@@ -162,6 +168,7 @@ export async function GET(
       metrics: [
         { label: "Present Days", value: String(currentReport.totals.presentDays) },
         { label: "Absent Days", value: String(currentReport.totals.absentDays) },
+        { label: "Leave Days", value: String(currentReport.totals.leaveDays) },
         { label: "Late Arrivals", value: String(currentReport.totals.lateDays) },
         { label: "Half Days", value: String(currentReport.totals.halfDays) },
         { label: "Total Work Hours", value: formatDurationMinutes(currentReport.totals.totalWorkingMinutes) },

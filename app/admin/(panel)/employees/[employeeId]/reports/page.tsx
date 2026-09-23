@@ -12,7 +12,7 @@ import { getOrganizationSettings } from "@/lib/organization-settings";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Profile, AttendanceRecord } from "@/lib/types";
 import { formatDate, formatDurationMinutes, roleLabel, todayISOInTimezone, parseTimeToMinutes, formatTime } from "@/lib/utils";
-import { buildCompleteTimelineWithAbsent } from "@/lib/attendance";
+import { buildCompleteTimelineWithAbsent, getApprovedLeaveDates } from "@/lib/attendance";
 import { 
   buildAttendanceReport, 
   getWeeklyPeriod, 
@@ -101,15 +101,20 @@ export default async function AdminEmployeeReportsPage({
   const minDate = periodInfo.previous.from;
   const maxDate = periodInfo.current.to;
 
-  const { data: rawRecords } = await supabase
-    .from("attendance")
-    .select("*")
-    .eq("employee_id", employee.id)
-    .gte("work_date", minDate)
-    .lte("work_date", maxDate)
-    .order("work_date", { ascending: false });
+  const [rawRecordsRes, approvedLeavesMap] = await Promise.all([
+    supabase
+      .from("attendance")
+      .select("*")
+      .eq("employee_id", employee.id)
+      .gte("work_date", minDate)
+      .lte("work_date", maxDate)
+      .order("work_date", { ascending: false }),
+    getApprovedLeaveDates([employee.id], minDate, maxDate)
+  ]);
 
+  const rawRecords = rawRecordsRes.data;
   const actualRecords = (rawRecords || []) as AttendanceRecord[];
+  const employeeLeaves = approvedLeavesMap.get(employee.id) || new Set();
 
   const minimalProfile = {
     id: employee.id,
@@ -126,7 +131,8 @@ export default async function AdminEmployeeReportsPage({
     minimalProfile as any,
     periodInfo.current.from,
     periodInfo.current.to,
-    orgSettings
+    orgSettings,
+    employeeLeaves
   );
   const currentReport = buildAttendanceReport(currentTimeline, periodInfo.current.from, periodInfo.current.to, orgSettings);
 
@@ -136,7 +142,8 @@ export default async function AdminEmployeeReportsPage({
     minimalProfile as any,
     periodInfo.previous.from,
     periodInfo.previous.to,
-    orgSettings
+    orgSettings,
+    employeeLeaves
   );
   const previousReport = buildAttendanceReport(previousTimeline, periodInfo.previous.from, periodInfo.previous.to, orgSettings);
 
@@ -207,7 +214,8 @@ export default async function AdminEmployeeReportsPage({
         minimalProfile as any,
         mFrom,
         mTo,
-        orgSettings
+        orgSettings,
+        employeeLeaves
       );
       const mReport = buildAttendanceReport(mTimeline, mFrom, mTo, orgSettings);
       

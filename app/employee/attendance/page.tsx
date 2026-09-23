@@ -4,7 +4,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { Download } from "lucide-react";
-import { attendanceDisplayStatus, deriveAttendanceFlags, getTodayAttendanceForEmployee, getRecentAttendanceForEmployee, buildCompleteTimelineWithAbsent } from "@/lib/attendance";
+import { attendanceDisplayStatus, deriveAttendanceFlags, getTodayAttendanceForEmployee, getRecentAttendanceForEmployee, buildCompleteTimelineWithAbsent, getApprovedLeaveDates } from "@/lib/attendance";
 import { requireEmployeeProfile } from "@/lib/auth";
 import { getOrganizationSettings } from "@/lib/organization-settings";
 import { createClient } from "@/lib/supabase/server";
@@ -43,8 +43,14 @@ export default async function EmployeeAttendancePage({
   const historyDate = resolvedSearchParams?.history_date || "";
   const historyDateSelected = Boolean(historyDate);
 
-  const [attendance, records] = await Promise.all([
-    getTodayAttendanceForEmployee(profile.id, today, "employee-attendance"),
+  const fetchStartDate = historyDateSelected ? historyDate : subtractDaysISO(today, DEFAULT_HISTORY_DAYS);
+  const fetchEndDate = historyDateSelected ? historyDate : today;
+
+  const approvedLeavesMap = await getApprovedLeaveDates([profile.id], fetchStartDate, fetchEndDate);
+  const approvedLeaves = approvedLeavesMap.get(profile.id) || new Set();
+
+  const [{ attendance, isApprovedLeaveToday }, records] = await Promise.all([
+    getTodayAttendanceForEmployee(profile.id, today, "employee-attendance", settings),
     (async () => {
       if (historyDateSelected) {
         // Specific date filter
@@ -54,16 +60,18 @@ export default async function EmployeeAttendancePage({
           .eq("employee_id", profile.id)
           .eq("work_date", historyDate)
           .order("check_in_at", { ascending: false });
-        return (data ?? []) as AttendanceRecord[];
+
+        const specificRecords = (data ?? []) as AttendanceRecord[];
+        return buildCompleteTimelineWithAbsent(specificRecords, profile, historyDate, historyDate, settings, approvedLeaves);
       } else {
         // Default: recent history with complete timeline including absent days
         const recentRecords = await getRecentAttendanceForEmployee(profile.id, today, "employee-attendance");
-        return buildCompleteTimelineWithAbsent(recentRecords, profile, subtractDaysISO(today, DEFAULT_HISTORY_DAYS), today, settings);
+        return buildCompleteTimelineWithAbsent(recentRecords, profile, subtractDaysISO(today, DEFAULT_HISTORY_DAYS), today, settings, approvedLeaves);
       }
     })()
   ]);
 
-  const attendanceStatus = attendanceDisplayStatus(attendance);
+  const attendanceStatus = isApprovedLeaveToday && !attendance ? "Leave" : attendanceDisplayStatus(attendance);
   const isShowingRecent = !historyDateSelected;
 
   return (
@@ -105,12 +113,12 @@ export default async function EmployeeAttendancePage({
             <p>{formatWorkedDuration(attendance?.total_hours)}</p>
           </div>
         </div>
-        {!attendance ? <div className="mt-4"><EmptyState message="No attendance recorded for today." /></div> : null}
+        {!attendance && !isApprovedLeaveToday ? <div className="mt-4"><EmptyState message="No attendance recorded for today." /></div> : null}
         <div className="mt-4 grid gap-2 sm:grid-cols-2">
           <form action={checkIn}>
             <input type="hidden" name="source_path" value="/employee/attendance" />
             <SubmitButton
-              disabled={Boolean(attendance?.check_in_at)}
+              disabled={isApprovedLeaveToday || Boolean(attendance?.check_in_at) || attendance?.status === "Absent" || attendance?.status === "Leave"}
               pendingText="Checking in..."
               className="min-h-11 w-full rounded-lg bg-bie-700 px-4 font-extrabold text-white disabled:opacity-50 transition hover:bg-bie-800"
             >
@@ -120,7 +128,7 @@ export default async function EmployeeAttendancePage({
           <form action={checkOut}>
             <input type="hidden" name="source_path" value="/employee/attendance" />
             <SubmitButton
-              disabled={!attendance?.check_in_at || Boolean(attendance?.check_out_at)}
+              disabled={isApprovedLeaveToday || !attendance?.check_in_at || Boolean(attendance?.check_out_at) || attendance?.status === "Absent" || attendance?.status === "Leave"}
               pendingText="Checking out..."
               className="min-h-11 w-full rounded-lg border border-emerald-200 px-4 font-extrabold text-bie-700 disabled:opacity-50 transition hover:bg-emerald-50"
             >

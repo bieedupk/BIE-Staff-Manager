@@ -36,10 +36,10 @@ export default async function EmployeeDashboardPage({
   const today = todayISOInTimezone(settings.timezone);
   const supabase = await createClient();
 
-  const [locale, resolvedSearchParams, todayAttendance, { data: tasks }, { data: report }] = await Promise.all([
+  const [locale, resolvedSearchParams, { attendance: todayAttendance, isApprovedLeaveToday }, { data: tasks }, { data: report }] = await Promise.all([
     getLocale(),
     searchParams,
-    getTodayAttendanceForEmployee(profile.id, today, "employee-dashboard"),
+    getTodayAttendanceForEmployee(profile.id, today, "employee-dashboard", settings),
     supabase.from("tasks").select("id, status, due_date").eq("assigned_to", profile.id).order("due_date", { ascending: true }),
     supabase.from("daily_reports").select("id").eq("employee_id", profile.id).eq("report_date", today).maybeSingle()
   ]);
@@ -49,7 +49,7 @@ export default async function EmployeeDashboardPage({
   const pendingTasks = taskList.filter((task) => task.status !== "Completed");
   const completedTasks = taskList.filter((task) => task.status === "Completed");
   const dailyReport = report as Pick<DailyReport, "id"> | null;
-  const attendanceStatus = attendanceDisplayStatus(todayAttendance);
+  const attendanceStatus = isApprovedLeaveToday && !todayAttendance ? "Leave" : attendanceDisplayStatus(todayAttendance);
 
   return (
     <>
@@ -108,7 +108,7 @@ export default async function EmployeeDashboardPage({
             <form action={checkIn}>
               <input type="hidden" name="source_path" value="/employee/dashboard" />
               <SubmitButton
-                disabled={Boolean(todayAttendance?.check_in_at)}
+                disabled={isApprovedLeaveToday || Boolean(todayAttendance?.check_in_at) || todayAttendance?.status === "Absent" || todayAttendance?.status === "Leave"}
                 pendingText="Checking in..."
                 className="min-h-11 w-full rounded-lg bg-bie-700 px-4 font-extrabold text-white disabled:opacity-50 transition hover:bg-bie-800"
               >
@@ -118,7 +118,7 @@ export default async function EmployeeDashboardPage({
             <form action={checkOut}>
               <input type="hidden" name="source_path" value="/employee/dashboard" />
               <SubmitButton
-                disabled={!todayAttendance?.check_in_at || Boolean(todayAttendance?.check_out_at)}
+                disabled={isApprovedLeaveToday || !todayAttendance?.check_in_at || Boolean(todayAttendance?.check_out_at) || todayAttendance?.status === "Absent" || todayAttendance?.status === "Leave"}
                 pendingText="Checking out..."
                 className="min-h-11 w-full rounded-lg border border-slate-200 bg-slate-50 px-4 font-extrabold text-slate-700 disabled:opacity-50 transition hover:bg-slate-100"
               >
