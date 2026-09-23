@@ -14,6 +14,7 @@ export type DailyAttendanceRow = {
   isHalfDay: boolean;
   isCompleted: boolean;
   isPending: boolean;
+  isLeave: boolean;
   isCorrected: boolean | null;
 };
 
@@ -23,6 +24,7 @@ export type AttendanceReportTotals = {
   absentDays: number;
   lateDays: number;
   halfDays: number;
+  leaveDays: number;
   completedDays: number;
   totalWorkingMinutes: number;
   totalOvertimeMinutes: number;
@@ -84,6 +86,7 @@ export function buildAttendanceReport(
       isHalfDay: flags.isHalfDay,
       isCompleted: Boolean(record.check_out_at),
       isPending: flags.isPending,
+      isLeave: flags.isLeave,
       isCorrected
     };
   });
@@ -105,6 +108,7 @@ export function calculateAttendanceMetrics(dailyRows: DailyAttendanceRow[]): Att
   let absentDays = 0;
   let lateDays = 0;
   let halfDays = 0;
+  let leaveDays = 0;
   let completedDays = 0;
   let totalWorkingMinutes = 0;
   let totalOvertimeMinutes = 0;
@@ -114,7 +118,9 @@ export function calculateAttendanceMetrics(dailyRows: DailyAttendanceRow[]): Att
       continue;
     }
 
-    eligibleDays++;
+    if (row.isLeave) {
+      leaveDays++;
+    }
 
     if (row.isPresent) presentDays++;
     if (row.isAbsent) absentDays++;
@@ -126,12 +132,15 @@ export function calculateAttendanceMetrics(dailyRows: DailyAttendanceRow[]): Att
     totalOvertimeMinutes += row.overtimeMinutes;
   }
 
+  eligibleDays = presentDays + absentDays;
+
   return {
     eligibleDays,
     presentDays,
     absentDays,
     lateDays,
     halfDays,
+    leaveDays,
     completedDays,
     totalWorkingMinutes,
     totalOvertimeMinutes
@@ -315,6 +324,7 @@ export type ReportComparison = {
   absentDays: MetricComparison;
   lateDays: MetricComparison;
   halfDays: MetricComparison;
+  leaveDays: MetricComparison;
   totalWorkingMinutes: MetricComparison;
   overtimeMinutes: MetricComparison;
   punctualityRate: MetricComparison;
@@ -347,9 +357,10 @@ export function compareAttendanceReports(current: AttendanceReport, previous: At
     attendanceRate: compare(current.ratios.attendanceRate, previous.ratios.attendanceRate, true),
     absentDays: compare(current.totals.absentDays, previous.totals.absentDays, false),
     lateDays: compare(current.totals.lateDays, previous.totals.lateDays, false),
-    halfDays: compare(current.totals.halfDays, previous.totals.halfDays, false), // Generally lower is better
+    halfDays: compare(current.totals.halfDays, previous.totals.halfDays, false),
+    leaveDays: compare(current.totals.leaveDays, previous.totals.leaveDays, null),
     totalWorkingMinutes: compare(current.totals.totalWorkingMinutes, previous.totals.totalWorkingMinutes, null),
-    overtimeMinutes: compare(current.totals.totalOvertimeMinutes, previous.totals.totalOvertimeMinutes, null), // Always neutral
+    overtimeMinutes: compare(current.totals.totalOvertimeMinutes, previous.totals.totalOvertimeMinutes, null),
     punctualityRate: compare(current.ratios.punctualityRate, previous.ratios.punctualityRate, true)
   };
 }

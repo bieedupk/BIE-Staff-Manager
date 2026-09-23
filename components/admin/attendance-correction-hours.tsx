@@ -6,6 +6,7 @@ import { formatDurationMinutes, getOrgCurrentTimeHHMM } from "@/lib/utils";
 type Props = {
   initialCheckInTime: string;
   initialCheckOutTime: string;
+  initialStatus: string;
   /** "HH:MM" — the organization-configured duty start time (e.g. "09:00") */
   dutyStartTime: string;
   /** "YYYY-MM-DD" — organization-local today date */
@@ -23,6 +24,7 @@ type Props = {
 export function AttendanceCorrectionHours({
   initialCheckInTime,
   initialCheckOutTime,
+  initialStatus,
   dutyStartTime,
   todayDate,
   timezone,
@@ -32,6 +34,13 @@ export function AttendanceCorrectionHours({
 }: Props) {
   const serverStartMs = useRef<number | null>(null);
   const mountPerfMs = useRef<number | null>(null);
+
+  const [outcome, setOutcome] = useState(() => {
+    if (initialStatus === "Absent") return "Absent";
+    if (initialStatus === "Leave") return "Leave";
+    return "Worked";
+  });
+
   const [correctionDate, setCorrectionDate] = useState(initialCorrectionDate);
   const [checkInTime, setCheckInTime] = useState(initialCheckInTime);
   const [checkOutTime, setCheckOutTime] = useState(initialCheckOutTime);
@@ -76,6 +85,7 @@ export function AttendanceCorrectionHours({
   }, [currentOrgTime, correctionDate]);
 
   const isToday = correctionDate === todayDate;
+  const isTimeFieldsDisabled = outcome !== "Worked";
 
   // Check-in rule (same for today and historical): checkInTime >= dutyStartTime
   const checkInMin = dutyStartTime || undefined;
@@ -84,7 +94,7 @@ export function AttendanceCorrectionHours({
   const checkOutMax = isToday && currentOrgTime ? currentOrgTime : undefined;
 
   const calculatedDuration = useMemo(() => {
-    if (!checkInTime || !checkOutTime) {
+    if (outcome !== "Worked" || !checkInTime || !checkOutTime) {
       return { decimalHours: "", displayDuration: "" };
     }
 
@@ -101,7 +111,18 @@ export function AttendanceCorrectionHours({
     const decimalHours = String(Number((diff / 60).toFixed(2)));
     const displayDuration = formatDurationMinutes(diff);
     return { decimalHours, displayDuration };
-  }, [checkInTime, checkOutTime]);
+  }, [outcome, checkInTime, checkOutTime]);
+
+  function handleOutcomeChange(event: React.ChangeEvent<HTMLSelectElement>) {
+    const newOutcome = event.target.value;
+    setOutcome(newOutcome);
+    if (newOutcome !== "Worked") {
+      setCheckInTime("");
+      setCheckOutTime("");
+      if (checkInRef.current) checkInRef.current.setCustomValidity("");
+      if (checkOutRef.current) checkOutRef.current.setCustomValidity("");
+    }
+  }
 
   function handleDateChange(event: React.ChangeEvent<HTMLInputElement>) {
     const newDate = event.target.value;
@@ -156,6 +177,19 @@ export function AttendanceCorrectionHours({
   return (
     <>
       <label className="grid gap-1 text-sm font-bold text-slate-700">
+        Outcome
+        <select
+          name="attendance_outcome"
+          value={outcome}
+          onChange={handleOutcomeChange}
+          className="min-h-11 rounded-lg border border-slate-300 px-3"
+        >
+          <option value="Worked">Worked</option>
+          <option value="Absent">Absent</option>
+          <option value="Leave">Leave</option>
+        </select>
+      </label>
+      <label className="grid gap-1 text-sm font-bold text-slate-700">
         Correction date
         <input
           name="correction_date"
@@ -175,10 +209,11 @@ export function AttendanceCorrectionHours({
           type="time"
           value={checkInTime}
           min={checkInMin}
+          disabled={isTimeFieldsDisabled}
           onChange={handleCheckInChange}
           onInput={handleCheckInInput}
           onInvalid={handleCheckInInvalid}
-          className="min-h-11 rounded-lg border border-slate-300 px-3"
+          className="min-h-11 rounded-lg border border-slate-300 px-3 disabled:opacity-50"
         />
       </label>
       <label className="grid gap-1 text-sm font-bold text-slate-700">
@@ -189,20 +224,20 @@ export function AttendanceCorrectionHours({
           type="time"
           value={checkOutTime}
           max={checkOutMax}
+          disabled={isTimeFieldsDisabled}
           onChange={handleCheckOutChange}
           onInput={handleCheckOutInput}
           onInvalid={handleCheckOutInvalid}
-          className="min-h-11 rounded-lg border border-slate-300 px-3"
+          className="min-h-11 rounded-lg border border-slate-300 px-3 disabled:opacity-50"
         />
       </label>
       <label className="grid gap-1 text-sm font-bold text-slate-700">
-        Total hours
-        <input type="hidden" name="total_hours" value={calculatedDuration.decimalHours} />
+        Total hours (preview)
         <input
           type="text"
           readOnly
           value={calculatedDuration.displayDuration}
-          className="min-h-11 rounded-lg border border-slate-300 px-3 bg-slate-50 text-slate-800"
+          className="min-h-11 rounded-lg border border-slate-300 px-3 bg-slate-50 text-slate-800 disabled:opacity-50"
         />
       </label>
     </>

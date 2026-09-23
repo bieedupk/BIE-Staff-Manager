@@ -76,6 +76,10 @@ export default async function AdminEmployeeAttendancePage({
     .lte("work_date", to)
     .order("work_date", { ascending: false });
 
+  const { getApprovedLeaveDates } = await import("@/lib/attendance");
+  const approvedLeavesMap = await getApprovedLeaveDates([employee.id], from, to);
+  const employeeLeaves = approvedLeavesMap.get(employee.id) || new Set();
+
   const actualRecords = attendanceData || [];
 
   // Need to pass profile that matches what `buildCompleteTimelineWithAbsent` expects
@@ -93,7 +97,8 @@ export default async function AdminEmployeeAttendancePage({
     minimalProfile as any,
     from,
     to,
-    settings || undefined
+    settings || undefined,
+    employeeLeaves
   );
 
   const report = buildAttendanceReport(
@@ -190,9 +195,10 @@ export default async function AdminEmployeeAttendancePage({
           </div>
 
           {/* Summary Cards */}
-          <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
             <MetricCard label="Present Days" value={report.totals.presentDays} icon={UserCheck} accent="emerald" delay="50ms" />
             <MetricCard label="Absent Days" value={report.totals.absentDays} icon={UserX} accent="red" delay="100ms" />
+            <MetricCard label="Leave Days" value={report.totals.leaveDays} icon={CalendarDays} accent="slate" delay="125ms" />
             <MetricCard label="Late Arrivals" value={report.totals.lateDays} icon={Timer} accent="amber" delay="150ms" />
             <MetricCard label="Half Days" value={report.totals.halfDays} icon={CalendarDays} accent="orange" delay="200ms" />
             <MetricCard label="Total Work Hours" value={formatDurationMinutes(report.totals.totalWorkingMinutes)} icon={BriefcaseBusiness} accent="blue" delay="250ms" />
@@ -251,6 +257,9 @@ export default async function AdminEmployeeAttendancePage({
                           {row.isAbsent && (
                             <span className="rounded-md bg-red-100 px-2 py-0.5 text-[10px] font-bold text-red-800">Absent</span>
                           )}
+                          {row.isLeave && (
+                            <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-600">Leave</span>
+                          )}
                           {row.isLate && (
                             <span className="rounded-md bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-800">Late</span>
                           )}
@@ -260,7 +269,7 @@ export default async function AdminEmployeeAttendancePage({
                           {row.isCorrected === true && (
                             <span className="rounded-md bg-blue-100 px-2 py-0.5 text-[10px] font-bold text-blue-800">Corrected</span>
                           )}
-                          {!row.isPending && !row.isPresent && !row.isAbsent && (
+                          {!row.isPending && !row.isPresent && !row.isAbsent && !row.isLeave && (
                             <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-600">Unknown</span>
                           )}
                         </div>

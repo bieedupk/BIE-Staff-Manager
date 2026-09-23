@@ -14,6 +14,7 @@ type ActivityData = {
   isLate?: boolean;
   isHalfDay?: boolean;
   isPending?: boolean;
+  isLeave?: boolean;
 };
 
 export function ActivityBarsChart({ data, title, animationKey }: { data: ActivityData[]; title: string; animationKey?: string }) {
@@ -126,6 +127,10 @@ export function ActivityBarsChart({ data, title, animationKey }: { data: Activit
             <div className="h-1.5 w-3 rounded-full bg-report-absent"></div>
             <span>Absent</span>
           </div>
+          <div className="flex items-center gap-1.5">
+            <div className="h-1.5 w-3 rounded-full bg-slate-400"></div>
+            <span>Leave</span>
+          </div>
           <div className="flex items-center gap-1.5 ml-1">
             <div className="h-0.5 w-3 bg-report-scheduled border-t border-dashed border-report-scheduled"></div>
             <span>Scheduled</span>
@@ -189,7 +194,7 @@ export function ActivityBarsChart({ data, title, animationKey }: { data: Activit
               // Half Day uses orange bar
               if (d.isHalfDay) {
                 barColor = "bg-report-halfday";
-              } else if (d.isAbsent || d.isPending) {
+              } else if (d.isAbsent || d.isLeave || d.isPending) {
                 hasBar = false; // "Absent day: no worked-hours bar"
               } else if (d.isLate && !d.isHalfDay) {
                 barColor = "bg-report-present"; // green bar + amber cap overlay
@@ -247,6 +252,17 @@ export function ActivityBarsChart({ data, title, animationKey }: { data: Activit
                             }}
                           />
                         )}
+                        {d.isLeave && (
+                          <div
+                            className={`h-1.5 w-full ${barMaxWidth} rounded-full bg-slate-400`}
+                            title="Leave"
+                            style={{
+                              opacity: isInitial ? 0 : 1,
+                              transition: "opacity 400ms ease-out",
+                              transitionDelay: `${markerDelay}ms`
+                            }}
+                          />
+                        )}
                         {d.isPending && (
                           <div
                             className={`h-1.5 w-full ${barMaxWidth} rounded-full bg-slate-200`}
@@ -279,6 +295,7 @@ export function ActivityBarsChart({ data, title, animationKey }: { data: Activit
                         <span className="text-slate-400">Status:</span>
                         <div className="flex flex-col font-semibold leading-tight gap-1">
                           {d.isAbsent && <span className="text-red-400">Absent</span>}
+                          {d.isLeave && <span className="text-slate-300">Leave</span>}
                           {d.isPending && <span className="text-slate-400">Pending</span>}
 
                           {d.isPresent && !d.isAbsent && (
@@ -309,7 +326,7 @@ export function ActivityBarsChart({ data, title, animationKey }: { data: Activit
                           )}
                         </div>
                       ) : (
-                        d.isAbsent && (
+                        (d.isAbsent || d.isLeave) && (
                           <div className="flex justify-between gap-4 text-slate-400 mt-2">
                             <span>Worked:</span>
                             <span>0 minutes</span>

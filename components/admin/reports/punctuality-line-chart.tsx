@@ -12,6 +12,7 @@ type PunctualityData = {
   isAbsent: boolean;
   isPending: boolean;
   isPresent: boolean;
+  isLeave?: boolean;
   dateStr: string;
 };
 
@@ -99,6 +100,10 @@ export function PunctualityLineChart({ data, title, animationKey }: { data: Punc
           <div className="flex items-center gap-1.5">
             <div className="h-2.5 w-2.5 rounded-full bg-report-absent"></div>
             <span>Absent</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <div className="h-2.5 w-2.5 rounded-full bg-slate-400"></div>
+            <span>Leave</span>
           </div>
           <div className="flex items-center gap-1.5 ml-1">
             <div className="h-0.5 w-3 bg-report-scheduled border-t border-dashed border-report-scheduled"></div>
@@ -209,6 +214,10 @@ export function PunctualityLineChart({ data, title, animationKey }: { data: Punc
                   return <circle key={`absent-${i}`} cx={x} cy={markerY} r="4" fill="currentColor" className="text-report-absent" style={{ opacity: entered ? 1 : 0, transform: entered ? "translateY(0)" : "translateY(4px)", transition: "opacity 400ms ease-out, transform 400ms ease-out", transitionDelay: `${pointDelay}ms` }} />;
                 }
 
+                if (d.isLeave) {
+                  return <circle key={`leave-${i}`} cx={x} cy={markerY} r="4" fill="currentColor" className="text-slate-400" style={{ opacity: entered ? 1 : 0, transform: entered ? "translateY(0)" : "translateY(4px)", transition: "opacity 400ms ease-out, transform 400ms ease-out", transitionDelay: `${pointDelay}ms` }} />;
+                }
+
                 if (d.isPending) {
                   return <circle key={`pending-${i}`} cx={x} cy={markerY} r="4" fill="currentColor" className="text-report-pending" style={{ opacity: entered ? 0.5 : 0, transform: entered ? "translateY(0)" : "translateY(4px)", transition: "opacity 400ms ease-out, transform 400ms ease-out", transitionDelay: `${pointDelay}ms` }} />;
                 }
@@ -249,6 +258,7 @@ export function PunctualityLineChart({ data, title, animationKey }: { data: Punc
                 <span className="text-slate-400">Status: </span>
                 <span className="font-semibold text-white">
                   {data[hoveredIndex].isAbsent ? <span className="text-red-400">Absent</span> :
+                   data[hoveredIndex].isLeave ? <span className="text-slate-300">Leave</span> :
                    data[hoveredIndex].isPending ? <span className="text-slate-400">Pending</span> :
                    data[hoveredIndex].isLate ? <span className="text-amber-400">Late</span> :
                    <span className="text-emerald-400">On-time</span>}

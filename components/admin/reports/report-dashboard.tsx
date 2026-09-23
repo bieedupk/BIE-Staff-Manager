@@ -119,7 +119,8 @@ export function ReportDashboard({
           isPresent: existing.isPresent || false,
           isLate: existing.isLate || false,
           isHalfDay: existing.isHalfDay || false,
-          isPending: existing.isPending || false
+          isPending: existing.isPending || false,
+          isLeave: existing.isLeave || false
         });
         
         punctualityData.push({
@@ -132,6 +133,7 @@ export function ReportDashboard({
           isAbsent: existing.isAbsent || false,
           isPresent: existing.isPresent || false,
           isPending: existing.isPending || false,
+          isLeave: existing.isLeave || false,
           dateStr: formatDate(existing.date)
         });
       } else {
@@ -145,7 +147,8 @@ export function ReportDashboard({
           isPresent: false,
           isLate: false,
           isHalfDay: false,
-          isPending: true
+          isPending: true,
+          isLeave: false
         });
         
         punctualityData.push({
@@ -158,6 +161,7 @@ export function ReportDashboard({
           isAbsent: false,
           isPresent: false,
           isPending: true,
+          isLeave: false,
           dateStr: formatDate(dateIso)
         });
       }
@@ -244,8 +248,8 @@ export function ReportDashboard({
           <h2 className="text-xl font-extrabold text-slate-900">{type === "weekly" ? "Weekly" : type === "monthly" ? "Monthly" : "Yearly"} Attendance Report</h2>
         </div>
 
-        {/* Metric Cards - 8 KPIs */}
-        <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {/* Metric Cards - 9 KPIs */}
+        <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
           <div className="motion-safe:animate-fade-up opacity-0" style={{ animationDelay: '50ms' }}>
             <MetricCard 
               icon={TrendingUp}
@@ -273,6 +277,15 @@ export function ReportDashboard({
               value={currentReport.totals.absentDays} 
               rawMetricComparison={comparison.absentDays}
               accent="red"
+            />
+          </div>
+          <div className="motion-safe:animate-fade-up opacity-0" style={{ animationDelay: '175ms' }}>
+            <MetricCard
+              icon={CalendarCheck}
+              label="Leave Days"
+              value={currentReport.totals.leaveDays}
+              rawMetricComparison={comparison.leaveDays}
+              accent="slate"
             />
           </div>
           <div className="motion-safe:animate-fade-up opacity-0" style={{ animationDelay: '200ms' }}>
@@ -350,6 +363,7 @@ export function ReportDashboard({
               late={currentReport.totals.lateDays}
               halfDay={currentReport.totals.halfDays}
               absent={currentReport.totals.absentDays}
+              leave={currentReport.totals.leaveDays}
               eligible={currentReport.totals.eligibleDays}
               animationKey={animationKey}
             />
@@ -442,6 +456,7 @@ export function ReportDashboard({
                           {row.isPending && <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-600">Pending</span>}
                           {row.isPresent && <span className="rounded-md bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">Present</span>}
                           {row.isAbsent && <span className="rounded-md bg-red-100 px-2 py-0.5 text-[10px] font-bold text-red-800">Absent</span>}
+                          {row.isLeave && <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-600">Leave</span>}
                           {row.isLate && <span className="rounded-md bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-800">Late</span>}
                           {row.isHalfDay && <span className="rounded-md bg-orange-100 px-2 py-0.5 text-[10px] font-bold text-orange-800">Half Day</span>}
                         </div>
@@ -467,6 +482,7 @@ export function ReportDashboard({
                     <th className="px-5 py-3">Eligible Days</th>
                     <th className="px-5 py-3 text-emerald-700">Present</th>
                     <th className="px-5 py-3 text-red-700">Absent</th>
+                    <th className="px-5 py-3 text-slate-700">Leave</th>
                     <th className="px-5 py-3 text-amber-700">Late</th>
                     <th className="px-5 py-3 text-orange-700">Half Days</th>
                     <th className="px-5 py-3">Working Hours</th>
@@ -482,6 +498,7 @@ export function ReportDashboard({
                       <td className="px-5 py-3 text-slate-600">{report.totals.eligibleDays}</td>
                       <td className="px-5 py-3 text-slate-600">{report.totals.presentDays}</td>
                       <td className="px-5 py-3 text-slate-600">{report.totals.absentDays}</td>
+                      <td className="px-5 py-3 text-slate-600">{report.totals.leaveDays}</td>
                       <td className="px-5 py-3 text-slate-600">{report.totals.lateDays}</td>
                       <td className="px-5 py-3 text-slate-600">{report.totals.halfDays}</td>
                       <td className="px-5 py-3 text-slate-700 font-medium">

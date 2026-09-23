@@ -19,11 +19,15 @@ export async function logAudit(
     actorId = user?.id ?? null;
   }
 
-  await supabase.from("audit_logs").insert({
+  const { error } = await supabase.from("audit_logs").insert({
     actor_id: actorId,
     action,
     entity_type: entityType,
     entity_id: entityId ?? null,
     details: details ?? null
   });
+
+  if (error) {
+    throw new Error("Audit log could not be recorded.");
+  }
 }

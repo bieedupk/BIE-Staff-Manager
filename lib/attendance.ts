@@ -42,7 +42,12 @@ function logAttendanceRead(source: string, profileId: string, dateLabel: string,
   );
 }
 
-export async function getTodayAttendanceForEmployee(profileId: string, today: string, source: string) {
+export async function getTodayAttendanceForEmployee(
+  profileId: string,
+  today: string,
+  source: string,
+  settings: Pick<OrganizationSettings, "office_end_time" | "timezone">
+): Promise<{ attendance: AttendanceRecord | null; isApprovedLeaveToday: boolean }> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("attendance")
@@ -51,21 +56,83 @@ export async function getTodayAttendanceForEmployee(profileId: string, today: st
     .eq("work_date", today)
     .maybeSingle();
 
-  if (data || error) {
-    logAttendanceRead(source, profileId, today, Boolean(data), "session", error?.message);
-    return (data ?? null) as AttendanceRecord | null;
+  let fallbackData = null;
+  const admin = createAdminClient();
+
+  if (!data) {
+    logAttendanceRead(source, profileId, today, false, "session", error?.message);
+    const { data: fbData, error: fallbackError } = await admin
+      .from("attendance")
+      .select("*")
+      .eq("employee_id", profileId)
+      .eq("work_date", today)
+      .maybeSingle();
+
+    fallbackData = fbData;
+    logAttendanceRead(source, profileId, today, Boolean(fallbackData), "server-fallback", fallbackError?.message);
+  } else {
+    logAttendanceRead(source, profileId, today, true, "session", error?.message);
   }
 
-  const admin = createAdminClient();
-  const { data: fallbackData, error: fallbackError } = await admin
-    .from("attendance")
-    .select("*")
+  let attendance = (data || fallbackData || null) as AttendanceRecord | null;
+
+  // Check for Approved Leave
+  const { data: leave, error: leaveError } = await admin
+    .from("leave_requests")
+    .select("id")
     .eq("employee_id", profileId)
-    .eq("work_date", today)
+    .eq("status", "Approved")
+    .lte("from_date", today)
+    .gte("to_date", today)
+    .limit(1)
     .maybeSingle();
 
-  logAttendanceRead(source, profileId, today, Boolean(fallbackData), "server-fallback", fallbackError?.message);
-  return (fallbackData ?? null) as AttendanceRecord | null;
+  if (leaveError) {
+    throw new Error(`Failed to check Approved Leave for today: ${leaveError.message}`);
+  }
+
+  const isApprovedLeaveToday = Boolean(leave);
+  const isDutyEnded = isDutyEndedForDate(today, settings);
+
+  if (isApprovedLeaveToday) {
+    if (isDutyEnded) {
+      if (!attendance) {
+        attendance = {
+          id: `synthetic-leave-${profileId}-${today}`,
+          employee_id: profileId,
+          work_date: today,
+          check_in_at: null,
+          check_out_at: null,
+          total_hours: null,
+          status: "Leave",
+          correction_count: 0,
+          created_at: new Date().toISOString()
+        } as AttendanceRecord;
+      } else if (!attendance.check_in_at && !attendance.check_out_at && (!attendance.total_hours || Number(attendance.total_hours) === 0)) {
+        attendance = { ...attendance, status: "Leave" };
+      }
+    } else {
+      if (attendance && isEmptyFinalAttendancePlaceholder(attendance)) {
+        attendance = null;
+      }
+    }
+  } else {
+    if (attendance && isEmptyFinalAttendancePlaceholder(attendance)) {
+      attendance = null;
+    }
+  }
+
+  return { attendance, isApprovedLeaveToday };
+}
+
+export function isEmptyFinalAttendancePlaceholder(record: Pick<AttendanceRecord, "status" | "check_in_at" | "check_out_at" | "total_hours" | "correction_count">): boolean {
+  return (
+    record.status === "Leave" &&
+    record.check_in_at === null &&
+    record.check_out_at === null &&
+    (record.total_hours === null || Number(record.total_hours) === 0) &&
+    (record.correction_count || 0) === 0
+  );
 }
 
 export async function getMonthlyAttendanceForEmployee(profileId: string, monthStart: string, source: string) {
@@ -190,23 +257,65 @@ export async function getRecentAttendanceForAll(
   return (fallbackData ?? []) as AttendanceRecord[];
 }
 
-export function createSyntheticAbsentRecord(
+export function createSyntheticFinalRecord(
   employeeId: string,
   workDate: string,
   profile: Pick<Profile, "id" | "full_name" | "email" | "department" | "department_id" | "designation">,
   status: AttendanceStatus = "Absent"
 ): AttendanceRecord {
+  const typeStr = status.toLowerCase();
   return {
-    id: `synthetic-absent-${employeeId}-${workDate}`,
+    id: `synthetic-${typeStr}-${employeeId}-${workDate}`,
     employee_id: employeeId,
     work_date: workDate,
     check_in_at: null,
     check_out_at: null,
     total_hours: null,
     status,
+    correction_count: 0,
     created_at: new Date().toISOString(),
     profiles: profile
   };
+}
+
+export async function getApprovedLeaveDates(
+  employeeIds: string[],
+  startDate: string,
+  endDate: string
+): Promise<Map<string, Set<string>>> {
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from("leave_requests")
+    .select("employee_id, from_date, to_date")
+    .eq("status", "Approved")
+    .in("employee_id", employeeIds)
+    .lte("from_date", endDate)
+    .gte("to_date", startDate);
+
+  if (error) {
+    throw new Error(`Failed to load Approved Leave data: ${error.message}`);
+  }
+
+  const leaveMap = new Map<string, Set<string>>();
+  for (const empId of employeeIds) {
+    leaveMap.set(empId, new Set());
+  }
+
+  if (data) {
+    for (const req of data) {
+      const dates = getDateRange(
+        req.from_date > startDate ? req.from_date : startDate,
+        req.to_date < endDate ? req.to_date : endDate
+      );
+      const empSet = leaveMap.get(req.employee_id) || new Set();
+      for (const d of dates) {
+        empSet.add(d);
+      }
+      leaveMap.set(req.employee_id, empSet);
+    }
+  }
+
+  return leaveMap;
 }
 
 export function buildCompleteTimelineWithAbsent(
@@ -214,7 +323,8 @@ export function buildCompleteTimelineWithAbsent(
   employee: Profile,
   startDate: string,
   endDate: string,
-  settings?: Pick<OrganizationSettings, "office_end_time" | "timezone">
+  settings?: Pick<OrganizationSettings, "office_end_time" | "timezone">,
+  approvedLeaves: Set<string> = new Set()
 ): AttendanceRecord[] {
   const recordsByDate = new Map(actualRecords.map((r) => [r.work_date, r]));
   const dates = getDateRange(startDate, endDate);
@@ -222,15 +332,41 @@ export function buildCompleteTimelineWithAbsent(
   const timeline: AttendanceRecord[] = [];
   for (const date of dates.reverse()) {
     const existing = recordsByDate.get(date);
+    const isApprovedLeave = approvedLeaves.has(date);
+    const isDutyEnded = settings ? isDutyEndedForDate(date, settings) : true;
+
     if (existing) {
-      timeline.push(existing);
+      if (isDutyEnded) {
+        if (isApprovedLeave) {
+          const hasWorked = existing.check_in_at !== null || existing.check_out_at !== null || (existing.total_hours !== null && Number(existing.total_hours) > 0) || (existing.correction_count ?? 0) > 0;
+          if (!hasWorked) {
+            timeline.push({ ...existing, status: "Leave" });
+          } else {
+            timeline.push(existing);
+          }
+          continue;
+        } else {
+          if (!isEmptyFinalAttendancePlaceholder(existing)) {
+            timeline.push(existing);
+            continue;
+          }
+        }
+      } else {
+        if (isEmptyFinalAttendancePlaceholder(existing)) {
+          continue;
+        }
+        timeline.push(existing);
+        continue;
+      }
+    }
+
+    if (settings && !isDutyEnded) {
       continue;
     }
-    if (settings && !isDutyEndedForDate(date, settings)) {
-      continue;
-    }
+
+    const finalStatus = isApprovedLeave ? "Leave" : "Absent";
     timeline.push(
-      createSyntheticAbsentRecord(
+      createSyntheticFinalRecord(
         employee.id,
         date,
         {
@@ -241,7 +377,7 @@ export function buildCompleteTimelineWithAbsent(
           department_id: employee.department_id,
           designation: employee.designation
         },
-        "Absent"
+        finalStatus
       )
     );
   }
@@ -251,8 +387,11 @@ export function buildCompleteTimelineWithAbsent(
 
 export function attendanceDisplayStatus(attendance: AttendanceRecord | null) {
   if (!attendance) return "Not Checked In";
-  if (attendance.check_out_at) return "Attendance Completed";
-  return "Checked In";
+  if (attendance.status === "Leave") return "Leave";
+  if (attendance.status === "Absent") return "Absent";
+  if (attendance.check_in_at && attendance.check_out_at) return "Attendance Completed";
+  if (attendance.check_in_at && !attendance.check_out_at) return "Pending";
+  return "Not Checked In";
 }
 
 export function formatDurationFromHours(hours: number | null | undefined) {
@@ -279,7 +418,8 @@ export type AttendanceFlags = {
   isHalfDay: boolean;
   isAbsent: boolean;
   isPending: boolean;
-  displayStatuses: Array<"Present" | "Late" | "Half Day" | "Absent" | "Pending">;
+  isLeave: boolean;
+  displayStatuses: Array<"Present" | "Late" | "Half Day" | "Absent" | "Pending" | "Leave">;
 };
 
 export function deriveAttendanceFlags(
@@ -289,6 +429,33 @@ export function deriveAttendanceFlags(
     | undefined,
   settings: Pick<OrganizationSettings, "timezone" | "late_threshold_time" | "office_start_time" | "office_end_time">
 ): AttendanceFlags {
+  if (attendance?.status === "Leave") {
+    const hasWorked = attendance.check_in_at !== null || attendance.check_out_at !== null || (attendance.total_hours !== null && Number(attendance.total_hours) > 0);
+    if (!hasWorked) {
+      return {
+        isPresent: false,
+        isLate: false,
+        isHalfDay: false,
+        isAbsent: false,
+        isPending: false,
+        isLeave: true,
+        displayStatuses: ["Leave"]
+      };
+    }
+  }
+
+  if (attendance?.status === "Absent") {
+    return {
+      isPresent: false,
+      isLate: false,
+      isHalfDay: false,
+      isAbsent: true,
+      isPending: false,
+      isLeave: false,
+      displayStatuses: ["Absent"]
+    };
+  }
+
   if (!attendance?.check_in_at) {
     const isPending = Boolean(attendance?.work_date && !isDutyEndedForDate(attendance.work_date, settings));
     if (isPending || attendance?.status === "Pending") {
@@ -298,6 +465,7 @@ export function deriveAttendanceFlags(
         isHalfDay: false,
         isAbsent: false,
         isPending: true,
+        isLeave: false,
         displayStatuses: ["Pending"]
       };
     }
@@ -308,7 +476,20 @@ export function deriveAttendanceFlags(
       isHalfDay: false,
       isAbsent: true,
       isPending: false,
+      isLeave: false,
       displayStatuses: ["Absent"]
+    };
+  }
+
+  if (!attendance.check_out_at) {
+    return {
+      isPresent: false,
+      isLate: false,
+      isHalfDay: false,
+      isAbsent: false,
+      isPending: true,
+      isLeave: false,
+      displayStatuses: ["Pending"]
     };
   }
 
@@ -316,7 +497,6 @@ export function deriveAttendanceFlags(
   const isLate = timeInZoneMinutes(attendance.check_in_at, settings.timezone) > lateThreshold;
   const halfDayThreshold = getHalfDayThresholdHours(settings);
   const isHalfDay =
-    Boolean(attendance.check_out_at) &&
     attendance.total_hours !== null &&
     Number(attendance.total_hours) <= halfDayThreshold;
 
@@ -334,6 +514,7 @@ export function deriveAttendanceFlags(
     isHalfDay,
     isAbsent: false,
     isPending: false,
+    isLeave: false,
     displayStatuses
   };
 }

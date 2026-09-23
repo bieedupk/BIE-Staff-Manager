@@ -3,7 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getOrganizationSettings } from "@/lib/organization-settings";
 import { getEmployeeDepartmentNames } from "@/lib/employee-departments";
 import { todayISOInTimezone, formatDurationMinutes, formatDate } from "@/lib/utils";
-import { buildCompleteTimelineWithAbsent } from "@/lib/attendance";
+import { buildCompleteTimelineWithAbsent, getApprovedLeaveDates } from "@/lib/attendance";
 import { buildAttendanceReport } from "@/lib/attendance-report";
 import { buildAttendanceSummaryPdf } from "@/lib/attendance-summary-pdf";
 
@@ -48,15 +48,19 @@ export async function GET(
     const from = fromParam > toParam ? toParam : fromParam;
     const to = toParam > todayOrg ? todayOrg : toParam;
 
-    const { data: attendanceData } = await supabase
-      .from("attendance")
-      .select("*")
-      .eq("employee_id", employee.id)
-      .gte("work_date", from)
-      .lte("work_date", to)
-      .order("work_date", { ascending: false });
+    const [attendanceDataRes, approvedLeavesMap] = await Promise.all([
+      supabase
+        .from("attendance")
+        .select("*")
+        .eq("employee_id", employee.id)
+        .gte("work_date", from)
+        .lte("work_date", to)
+        .order("work_date", { ascending: false }),
+      getApprovedLeaveDates([employee.id], from, to)
+    ]);
 
-    const actualRecords = attendanceData || [];
+    const actualRecords = attendanceDataRes.data || [];
+    const employeeLeaves = approvedLeavesMap.get(employee.id) || new Set();
 
     const minimalProfile = {
       id: employee.id,
@@ -72,7 +76,8 @@ export async function GET(
       minimalProfile as any,
       from,
       to,
-      settings || undefined
+      settings || undefined,
+      employeeLeaves
     );
 
     const report = buildAttendanceReport(
@@ -108,6 +113,7 @@ export async function GET(
       metrics: [
         { label: "Present Days", value: String(report.totals.presentDays) },
         { label: "Absent Days", value: String(report.totals.absentDays) },
+        { label: "Leave Days", value: String(report.totals.leaveDays) },
         { label: "Late Arrivals", value: String(report.totals.lateDays) },
         { label: "Half Days", value: String(report.totals.halfDays) },
         { label: "Total Work Hours", value: formatDurationMinutes(report.totals.totalWorkingMinutes) },

@@ -2,8 +2,8 @@ export type UserRole = "super_admin" | "admin" | "supervisor" | "employee";
 export type EmployeeStatus = "active" | "disabled";
 export type WelcomeEmailMode = "automatic" | "manual";
 export type WelcomeEmailStatus = "pending" | "sending" | "sent" | "failed" | "skipped";
-export type AttendanceStatus = "Present" | "Absent" | "Late" | "Half Day" | "Pending";
-export type LeaveStatus = "Pending" | "Approved" | "Rejected";
+export type AttendanceStatus = "Present" | "Absent" | "Late" | "Half Day" | "Pending" | "Leave";
+export type LeaveStatus = "Pending" | "Approved" | "Rejected" | "Cancelled";
 export type TaskStatus = "Pending" | "In Progress" | "Completed" | "Overdue";
 export type TaskPriority = "Low" | "Medium" | "High" | "Urgent";
 export type DailyReportReviewStatus = "pending_review" | "reviewed";
@@ -79,6 +79,7 @@ export type AttendanceRecord = {
   check_out_at: string | null;
   total_hours: number | null;
   status: AttendanceStatus;
+  correction_count: number;
   created_at: string;
   profiles?: Pick<Profile, "id" | "full_name" | "email" | "department" | "department_id" | "designation"> | null;
 };
@@ -95,7 +96,7 @@ export type LeaveRequest = {
   reviewed_by: string | null;
   reviewed_at: string | null;
   created_at: string;
-  profiles?: Pick<Profile, "id" | "full_name" | "department" | "department_id"> | null;
+  employee_profile?: Pick<Profile, "id" | "full_name" | "department" | "department_id" | "designation"> | null;
 };
 
 export type Task = {

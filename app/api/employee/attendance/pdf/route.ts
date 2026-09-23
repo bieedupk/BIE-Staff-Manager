@@ -1,7 +1,7 @@
 import { requireEmployeeProfile } from "@/lib/auth";
 import { getOrganizationSettings } from "@/lib/organization-settings";
 import { createClient } from "@/lib/supabase/server";
-import { buildCompleteTimelineWithAbsent, getRecentAttendanceForEmployee } from "@/lib/attendance";
+import { buildCompleteTimelineWithAbsent, getRecentAttendanceForEmployee, getApprovedLeaveDates } from "@/lib/attendance";
 import { buildAttendanceReport } from "@/lib/attendance-report";
 import { buildAttendanceSummaryPdf } from "@/lib/attendance-summary-pdf";
 import { todayISOInTimezone, formatDurationMinutes, formatDate } from "@/lib/utils";
@@ -54,7 +54,10 @@ export async function GET(request: Request) {
       actualRecords = await getRecentAttendanceForEmployee(profile.id, today, "employee-attendance");
     }
 
-    const completeTimeline = buildCompleteTimelineWithAbsent(actualRecords, profile as any, from, to, settings);
+    const approvedLeavesMap = await getApprovedLeaveDates([profile.id], from, to);
+    const employeeLeaves = approvedLeavesMap.get(profile.id) || new Set();
+
+    const completeTimeline = buildCompleteTimelineWithAbsent(actualRecords, profile as any, from, to, settings, employeeLeaves);
 
     const report = buildAttendanceReport(
       completeTimeline,
@@ -93,6 +96,7 @@ export async function GET(request: Request) {
       metrics: [
         { label: "Present Days", value: String(report.totals.presentDays) },
         { label: "Absent Days", value: String(report.totals.absentDays) },
+        { label: "Leave Days", value: String(report.totals.leaveDays) },
         { label: "Late Arrivals", value: String(report.totals.lateDays) },
         { label: "Half Days", value: String(report.totals.halfDays) },
         { label: "Total Work Hours", value: formatDurationMinutes(report.totals.totalWorkingMinutes) },

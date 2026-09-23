@@ -66,6 +66,10 @@ function attendanceActionErrorMessage(error: unknown, action: "check_in" | "chec
     return "Attendance setup is incomplete. Please run migration 004_attendance_rpc_signature_fix.sql in Supabase.";
   }
 
+  if (message.includes("Approved leave exists for today")) {
+    return "Check-in is unavailable because you have approved Leave for today.";
+  }
+
   if (message) return message;
 
   return action === "check_in" ? "Check In could not be completed." : "Check Out could not be completed.";
@@ -85,6 +89,12 @@ function nullableFormString(formData: FormData, key: string) {
 function nullableFormNumber(formData: FormData, key: string) {
   const value = String(formData.get(key) ?? "").trim();
   return value ? Number(value) : null;
+}
+
+function isValidISODate(dateString: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateString)) return false;
+  const date = new Date(`${dateString}T00:00:00Z`);
+  return !isNaN(date.getTime()) && date.toISOString().startsWith(dateString);
 }
 
 function addDaysISO(isoDate: string, days: number): string {
@@ -246,10 +256,24 @@ export async function correctAttendance(formData: FormData) {
   const settings = await getOrganizationSettings();
   const id = String(formData.get("id") || "");
   const correctionDate = String(formData.get("correction_date") || "").trim();
-  const checkInTime = nullableFormString(formData, "check_in_time");
-  const checkOutTime = nullableFormString(formData, "check_out_time");
-  const totalHours = nullableFormNumber(formData, "total_hours");
+
+  const rawCheckIn = nullableFormString(formData, "check_in_time");
+  const rawCheckOut = nullableFormString(formData, "check_out_time");
+
+  let checkInTime = rawCheckIn;
+  let checkOutTime = rawCheckOut;
+
+  if (rawCheckIn === "00:00" && rawCheckOut === "00:00") {
+    checkInTime = null;
+    checkOutTime = null;
+  }
+
   const correctionReason = String(formData.get("correction_reason") || "").trim();
+  const outcome = String(formData.get("attendance_outcome") || "Worked");
+
+  if (!["Worked", "Absent", "Leave"].includes(outcome)) {
+    redirectWithAttendanceCorrectionMessage(returnPath, "error", "Invalid attendance outcome selected.");
+  }
 
   if (!correctionReason) {
     redirectWithAttendanceCorrectionMessage(returnPath, "error", "Correction reason is required.");
@@ -259,20 +283,39 @@ export async function correctAttendance(formData: FormData) {
     redirectWithAttendanceCorrectionMessage(returnPath, "error", "Correction date is required.");
   }
 
+  if (!isValidISODate(correctionDate)) {
+    redirectWithAttendanceCorrectionMessage(returnPath, "error", "Correction date is invalid.");
+  }
+
   if (!id) {
     redirectWithAttendanceCorrectionMessage(returnPath, "error", "Attendance record id is required.");
   }
 
-  // ── Business rule validation ─────────────────────────────────────────────────
-
-  // 1. Future date check: correctionDate must not be later than today in org timezone
+  const isMissingCheckIn = !checkInTime;
+  const isMissingCheckOut = !checkOutTime;
   const orgTodayISO = todayISOInTimezone(settings.timezone);
 
+  if (outcome === "Worked") {
+    if (isMissingCheckIn) {
+      redirectWithAttendanceCorrectionMessage(returnPath, "error", "Check-in time is required for Worked attendance.");
+    }
+    if (isMissingCheckOut && correctionDate < orgTodayISO) {
+      redirectWithAttendanceCorrectionMessage(returnPath, "error", "Check-out time is required for past Worked attendance.");
+    }
+  } else {
+    // Absent or Leave: both times nullified
+    checkInTime = null;
+    checkOutTime = null;
+  }
+
+  // ── Business rule validation ─────────────────────────────────────────────────
+
+  // 1. Future date check
   if (correctionDate > orgTodayISO) {
     redirectWithAttendanceCorrectionMessage(returnPath, "error", "Attendance cannot be recorded for a future date.");
   }
 
-  // 2. Check-in must not be earlier than configured duty start time (applies to today and past dates)
+  // 2. Check-in validation
   if (checkInTime) {
     const dutyStartMinutes = parseTimeToMinutes(settings.office_start_time);
     const checkInMinutes = parseTimeToMinutes(checkInTime);
@@ -288,181 +331,101 @@ export async function correctAttendance(formData: FormData) {
   const isOvernight = Boolean(checkInTime && checkOutTime && checkOutTime < checkInTime);
   const checkOutDate = isOvernight ? addDaysISO(correctionDate, 1) : correctionDate;
 
-  // 3. If correction date is today: check-out must not be later than current org-local time
-  if (checkOutTime && correctionDate === orgTodayISO) {
-    const currentOrgMinutes = getOrgCurrentTimeMinutes(settings.timezone);
-    const checkOutMinutes = parseTimeToMinutes(checkOutTime);
+  // Ensure timestamps are not in the future compared to absolute current time
+  let checkInAt = checkInTime ? buildTimestampFromDateAndTime(correctionDate, checkInTime, settings.timezone) : null;
+  let checkOutAt = checkOutTime ? buildTimestampFromDateAndTime(checkOutDate, checkOutTime, settings.timezone) : null;
 
-    // On today, an overnight checkout (which advances to tomorrow) is in the future.
-    // Also, same-day checkout cannot exceed current time.
-    if (isOvernight || (checkOutMinutes !== null && checkOutMinutes > currentOrgMinutes)) {
-      redirectWithAttendanceCorrectionMessage(returnPath, "error", "Check-out time cannot be later than the current time.");
-    }
+  const now = new Date();
+  if (checkInAt && new Date(checkInAt) > now) {
+    redirectWithAttendanceCorrectionMessage(returnPath, "error", "Check-in time cannot be in the future.");
+  }
+  if (checkOutAt && new Date(checkOutAt) > now) {
+    redirectWithAttendanceCorrectionMessage(returnPath, "error", "Check-out time cannot be in the future.");
   }
 
   // ── End business rule validation ─────────────────────────────────────────────
 
-  const isSyntheticAbsent = id.startsWith("synthetic-absent-");
-  const status = String(formData.get("status") || "Present");
+  const isSynthetic = id.startsWith("synthetic-");
+  let employeeId = String(formData.get("employee_id") || "").trim();
 
-  const checkInAt = buildTimestampFromDateAndTime(correctionDate, checkInTime, settings.timezone);
-  const checkOutAt = buildTimestampFromDateAndTime(checkOutDate, checkOutTime, settings.timezone);
-
-  if (isSyntheticAbsent) {
-    // Handle synthetic absent row correction
-    const employeeId = String(formData.get("employee_id") || "").trim();
-    if (!employeeId) {
-      redirectWithAttendanceCorrectionMessage(returnPath, "error", "Employee id is required for synthetic absent correction.");
-    }
-
-    // Check if attendance already exists for this employee_id and correction_date
-    const { data: existingByDate, error: checkError } = await supabase
+  if (!isSynthetic) {
+    const { data: existing, error: fetchError } = await supabase
       .from("attendance")
-      .select("id, work_date, check_in_at, check_out_at, status, total_hours")
-      .eq("employee_id", employeeId)
-      .eq("work_date", correctionDate)
-      .maybeSingle();
-
-    if (checkError && checkError.code !== "PGRST116") {
-      redirectWithAttendanceCorrectionMessage(returnPath, "error", "Could not check existing attendance records.");
-    }
-
-    if (existingByDate) {
-      // Update existing attendance record
-      const updates: Record<string, unknown> = {
-        check_in_at: checkInAt,
-        check_out_at: checkOutAt,
-        status,
-        total_hours: totalHours,
-        updated_at: new Date().toISOString()
-      };
-
-      const { data: updatedAttendance, error } = await supabase
-        .from("attendance")
-        .update(updates)
-        .eq("id", existingByDate.id)
-        .select("id")
-        .maybeSingle();
-
-      if (error || !updatedAttendance) {
-        redirectWithAttendanceCorrectionMessage(returnPath, "error", "Attendance correction could not be saved.");
-      }
-
-      const auditDetails: Record<string, unknown> = {
-        old_check_in_at: existingByDate.check_in_at,
-        old_check_out_at: existingByDate.check_out_at,
-        old_status: existingByDate.status,
-        old_total_hours: existingByDate.total_hours,
-        old_work_date: existingByDate.work_date,
-        new_check_in_at: checkInAt,
-        new_check_out_at: checkOutAt,
-        new_status: status,
-        new_total_hours: totalHours,
-        new_work_date: correctionDate,
-        correction_reason: correctionReason
-      };
-
-      await logAudit("attendance_corrected", "attendance", existingByDate.id, auditDetails, { actorId: currentProfile.id });
-    } else {
-      if (!isDutyEndedForDate(correctionDate, settings)) {
-        redirectWithAttendanceCorrectionMessage(
-          returnPath,
-          "error",
-          "Attendance correction for a missing record is available after duty hours end."
-        );
-      }
-
-      // Insert new attendance record from synthetic absent correction
-      const { data: insertedAttendance, error: insertError } = await supabase
-        .from("attendance")
-        .insert({
-          employee_id: employeeId,
-          work_date: correctionDate,
-          check_in_at: checkInAt,
-          check_out_at: checkOutAt,
-          status,
-          total_hours: totalHours,
-          updated_at: new Date().toISOString()
-        })
-        .select("id")
-        .maybeSingle();
-
-      if (insertError || !insertedAttendance) {
-        redirectWithAttendanceCorrectionMessage(returnPath, "error", "Attendance correction could not be saved.");
-      }
-
-      const auditDetails: Record<string, unknown> = {
-        old_check_in_at: null,
-        old_check_out_at: null,
-        old_status: "Absent",
-        old_total_hours: null,
-        old_work_date: correctionDate,
-        new_check_in_at: checkInAt,
-        new_check_out_at: checkOutAt,
-        new_status: status,
-        new_total_hours: totalHours,
-        new_work_date: correctionDate,
-        correction_reason: correctionReason,
-        created_from_synthetic_absent: true
-      };
-
-      await logAudit("attendance_corrected", "attendance", insertedAttendance.id, auditDetails, { actorId: currentProfile.id });
-    }
-  } else {
-    // Handle real attendance record correction (existing logic)
-    const { data: existingAttendance, error: fetchError } = await supabase
-      .from("attendance")
-      .select("id, work_date, check_in_at, check_out_at, status, total_hours")
+      .select("employee_id")
       .eq("id", id)
       .maybeSingle();
 
-    if (fetchError || !existingAttendance) {
+    if (fetchError || !existing) {
       redirectWithAttendanceCorrectionMessage(returnPath, "error", "Attendance record does not exist.");
     }
+    employeeId = existing.employee_id;
+  } else if (!employeeId) {
+    redirectWithAttendanceCorrectionMessage(returnPath, "error", "Employee id is required for synthetic record correction.");
+  }
 
-    const updates: Record<string, unknown> = {
-      check_in_at: checkInAt,
-      check_out_at: checkOutAt,
-      status,
-      total_hours: totalHours,
-      updated_at: new Date().toISOString()
-    };
+  if (isSynthetic && !isDutyEndedForDate(correctionDate, settings)) {
+    redirectWithAttendanceCorrectionMessage(
+      returnPath,
+      "error",
+      "Attendance correction for a missing record is available after duty hours end."
+    );
+  }
 
-    if (correctionDate && existingAttendance.work_date && existingAttendance.work_date !== correctionDate) {
-      updates.work_date = correctionDate;
+  // Calculate final total hours
+  let finalTotalHours: number | null = null;
+  if (outcome === "Worked" && checkInAt && checkOutAt) {
+    const ms = new Date(checkOutAt).getTime() - new Date(checkInAt).getTime();
+    if (ms <= 0) {
+      redirectWithAttendanceCorrectionMessage(returnPath, "error", "Elapsed duration must be positive.");
     }
+    finalTotalHours = Math.round((ms / (1000 * 60 * 60)) * 100) / 100;
+  }
 
-    const { data: updatedAttendance, error } = await supabase
-      .from("attendance")
-      .update(updates)
-      .eq("id", id)
-      .select("id")
-      .maybeSingle();
+  // Determine canonical status
+  let finalStatus = "Present";
+  if (outcome === "Absent") finalStatus = "Absent";
+  else if (outcome === "Leave") finalStatus = "Leave";
+  else {
+    const checkInMinutes = checkInTime ? parseTimeToMinutes(checkInTime) : null;
+    const lateThresholdMinutes = parseTimeToMinutes(settings.late_threshold_time);
+    const halfDayThreshold = getHalfDayThresholdHours(settings);
 
-    if (error || !updatedAttendance) {
-      redirectWithAttendanceCorrectionMessage(returnPath, "error", "Attendance correction could not be saved.");
+    if (finalTotalHours !== null && finalTotalHours <= halfDayThreshold) {
+      finalStatus = "Half Day";
+    } else if (checkInMinutes !== null && lateThresholdMinutes !== null && checkInMinutes > lateThresholdMinutes) {
+      finalStatus = "Late";
     }
+  }
 
-    const auditDetails: Record<string, unknown> = {
-      old_check_in_at: existingAttendance.check_in_at,
-      old_check_out_at: existingAttendance.check_out_at,
-      old_status: existingAttendance.status,
-      old_total_hours: existingAttendance.total_hours,
-      new_check_in_at: checkInAt,
-      new_check_out_at: checkOutAt,
-      new_status: status,
-      new_total_hours: totalHours,
-      correction_reason: correctionReason
-    };
+  const { data: atomicResult, error: atomicError } = await supabase.rpc("correct_attendance_atomic", {
+    p_id: isSynthetic ? null : id,
+    p_employee_id: employeeId,
+    p_work_date: correctionDate,
+    p_check_in_at: checkInAt,
+    p_check_out_at: checkOutAt,
+    p_status: finalStatus,
+    p_total_hours: finalTotalHours,
+    p_correction_reason: correctionReason,
+    p_actor_id: currentProfile.id,
+    p_is_synthetic: isSynthetic
+  });
 
-    if (existingAttendance.work_date && correctionDate && existingAttendance.work_date !== correctionDate) {
-      auditDetails.old_work_date = existingAttendance.work_date;
-      auditDetails.new_work_date = correctionDate;
-    }
+  if (atomicError) {
+    let msg = atomicError.message || "Attendance correction could not be saved.";
+    if (msg.includes("Approved leave exists")) msg = "This date is covered by Approved Leave. Attendance correction is not available.";
+    else if (msg.includes("Target date already contains attendance") || msg.includes("Attendance record already exists")) msg = "Target date already contains an attendance record.";
+    else if (msg.includes("Correction limit reached")) msg = "Attendance correction limit has been reached.";
 
-    await logAudit("attendance_corrected", "attendance", id, auditDetails, { actorId: currentProfile.id });
+    redirectWithAttendanceCorrectionMessage(returnPath, "error", msg);
   }
 
   revalidatePath("/admin/attendance");
+  revalidatePath("/admin/dashboard");
+  revalidatePath("/employee/dashboard");
+  revalidatePath("/employee/attendance");
+  revalidatePath(`/admin/employees/${employeeId}`);
+  revalidatePath(`/admin/employees/${employeeId}/attendance`);
+  revalidatePath(`/admin/employees/${employeeId}/reports`);
+
   redirectWithAttendanceCorrectionMessage(adminAttendancePath(formData, "All"), "success", "Attendance correction saved.");
 }
