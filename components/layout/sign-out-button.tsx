@@ -8,6 +8,12 @@ export function SignOutButton({ label = "Sign Out" }: { label?: string }) {
   const router = useRouter();
 
   async function signOut() {
+    try {
+      await import("@/app/actions/devices").then(m => m.logoutDeviceSession());
+    } catch (e: any) {
+      alert(e.message || "Could not revoke session.");
+      return; // Do not clear local session if server revocation fails
+    }
     const supabase = createClient();
     await supabase.auth.signOut();
     document.cookie = "bie_remember_me=; path=/; max-age=0; SameSite=Lax";

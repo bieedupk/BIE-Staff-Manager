@@ -240,12 +240,23 @@ export async function POST(request: NextRequest) {
     });
 
     if (!deviceAccess.allowed) {
-      await supabase.auth.signOut();
+      if (deviceAccess.code === "mobile") {
+        await supabase.auth.signOut();
+        return withAuthCookies(
+          NextResponse.json({ error: deviceAccess.message || "Mobile access is blocked." }, { status: 403 }),
+          authCookies,
+          authHeaders,
+          false
+        );
+      }
+      // Missing token, unauthorized, or expired: Redirect to /device-access
       return withAuthCookies(
-        NextResponse.json({ error: deviceAccess.message || "This device is not authorized." }, { status: 403 }),
+        NextResponse.json({
+          redirectTo: "/device-access"
+        }),
         authCookies,
         authHeaders,
-        false
+        isRememberMe
       );
     }
 

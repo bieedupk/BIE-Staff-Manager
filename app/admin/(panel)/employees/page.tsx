@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { EmployeeMoreOptions } from "@/components/admin/employee-more-options";
 import { sendManualEmployeeWelcomeEmail, setEmployeeStatus, updateEmployee } from "@/app/actions/admin";
-import { disableAuthorizedDevice, registerAuthorizedDevice, resetAuthorizedDevice } from "@/app/actions/devices";
+import { disableAuthorizedDevice, resetAuthorizedDevice } from "@/app/actions/devices";
 import { Avatar } from "@/components/ui/avatar";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
@@ -63,7 +63,7 @@ export default async function AdminEmployeesPage({
     ? (resolvedSearchParams?.status_filter as EmployeeFilter)
     : "all";
   const supabase = canManageEmployees ? createAdminClient() : await createClient();
-  const [{ data: profiles }, { data: departments }, { data: authorizedDevices }, { data: welcomeEmailLogs }] = await Promise.all([
+  const [{ data: profiles }, { data: departments }, { data: authorizedDevices }, { data: welcomeEmailLogs }, { data: pendingRequests }] = await Promise.all([
     supabase.from("profiles").select("*"),
     supabase.from("departments").select("*").eq("is_active", true).order("sort_order", { ascending: true, nullsFirst: false }).order("name"),
     canManageEmployees
@@ -75,6 +75,9 @@ export default async function AdminEmployeesPage({
           .select("employee_id,status,created_at")
           .eq("template_key", "employee_welcome")
           .order("created_at", { ascending: false })
+      : Promise.resolve({ data: [] }),
+    canManageEmployees
+      ? supabase.from("device_registration_requests").select("*").eq("status", "pending").gt("expires_at", new Date().toISOString())
       : Promise.resolve({ data: [] })
   ]);
 
@@ -95,14 +98,22 @@ export default async function AdminEmployeesPage({
   ]);
   const supervisors = allEmployees.filter((profile) => ["super_admin", "admin", "supervisor"].includes(profile.role));
   const devices = (authorizedDevices ?? []) as AuthorizedDevice[];
+  const requests = (pendingRequests ?? []) as import("@/lib/types").DeviceRegistrationRequest[];
   const latestWelcomeEmailByEmployee = latestWelcomeEmailLogs((welcomeEmailLogs ?? []) as WelcomeEmailLog[]);
   const devicesByEmployee = new Map<string, AuthorizedDevice[]>();
+  const requestsByEmployee = new Map<string, import("@/lib/types").DeviceRegistrationRequest[]>();
   const defaultDepartmentId = activeDepartments.find((department) => departmentDisplayName(department.name) === "Administration")?.id;
 
   devices.forEach((device) => {
     const employeeDevices = devicesByEmployee.get(device.employee_id) ?? [];
     employeeDevices.push(device);
     devicesByEmployee.set(device.employee_id, employeeDevices);
+  });
+
+  requests.forEach((req) => {
+    const employeeRequests = requestsByEmployee.get(req.employee_id) ?? [];
+    employeeRequests.push(req);
+    requestsByEmployee.set(req.employee_id, employeeRequests);
   });
 
   return (
@@ -244,7 +255,11 @@ export default async function AdminEmployeesPage({
 
                     {employee.role === "employee" ? (
                       <div className="mt-1 border-t border-slate-100 pt-3">
-                        <AuthorizedDevicePanel devices={devicesByEmployee.get(employee.id) ?? []} employeeId={employee.id} />
+                        <AuthorizedDevicePanel
+                          devices={devicesByEmployee.get(employee.id) ?? []}
+                          pendingRequests={requestsByEmployee.get(employee.id) ?? []}
+                          employeeId={employee.id}
+                        />
                       </div>
                     ) : null}
                   </div>
@@ -333,50 +348,93 @@ function welcomeEmailStatusClass(status: EmailLogStatus | "pending" | "sending")
   return "bg-slate-50 text-slate-700 ring-slate-200";
 }
 
-function AuthorizedDevicePanel({ devices, employeeId }: { devices: AuthorizedDevice[]; employeeId: string }) {
+import { approveDeviceRequest, rejectDeviceRequest } from "@/app/actions/devices";
+
+function AuthorizedDevicePanel({
+  devices,
+  pendingRequests,
+  employeeId
+}: {
+  devices: AuthorizedDevice[];
+  pendingRequests: import("@/lib/types").DeviceRegistrationRequest[];
+  employeeId: string
+}) {
   const activeDevice = devices.find((device) => device.status === "active");
   const hasDisabledDevice = devices.some((device) => device.status === "disabled");
-  const statusLabel = activeDevice ? "Active" : hasDisabledDevice ? "Disabled" : "Not registered";
+  const isLegacy = activeDevice && !activeDevice.credential_id;
+  const statusLabel = activeDevice ? (isLegacy ? "Legacy" : "Active WebAuthn") : hasDisabledDevice ? "Disabled" : "Not registered";
 
   return (
-    <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <p className="text-sm font-extrabold text-slate-950">Authorized Device</p>
-          <p className="text-sm font-medium text-slate-600">
-            {activeDevice ? activeDevice.device_name : "No active authorized office computer."}
-          </p>
-          {activeDevice?.last_used_at ? (
-            <p className="mt-1 text-xs font-medium text-slate-500">Last used: {formatDateTime(activeDevice.last_used_at)}</p>
-          ) : null}
+    <div className="mt-4 flex flex-col gap-3">
+      <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <p className="text-sm font-extrabold text-slate-950">Authorized Device</p>
+            <p className="text-sm font-medium text-slate-600">
+              {activeDevice ? activeDevice.device_name : "No active authorized office computer."}
+            </p>
+            {activeDevice?.last_used_at ? (
+              <p className="mt-1 text-xs font-medium text-slate-500">Last used: {formatDateTime(activeDevice.last_used_at)}</p>
+            ) : null}
+            {isLegacy && activeDevice && (
+              <p className="mt-1 text-xs font-bold text-amber-600 bg-amber-50 rounded px-2 py-1 inline-block">
+                Legacy device — WebAuthn upgrade required
+              </p>
+            )}
+          </div>
+          <StatusBadge tone={activeDevice ? "employee" : "neutral"}>{statusLabel}</StatusBadge>
         </div>
-        <StatusBadge tone={activeDevice ? "employee" : "neutral"}>{statusLabel}</StatusBadge>
+        <div className="mt-3 flex flex-wrap gap-2">
+          {activeDevice && (
+            <>
+              <form action={disableAuthorizedDevice}>
+                <input type="hidden" name="employee_id" value={employeeId} />
+                <SubmitButton pendingText="Disabling..." className="rounded-lg border border-red-200 bg-white px-3 py-2 text-sm font-bold text-red-700 transition hover:bg-red-50 disabled:opacity-50">
+                  Disable device
+                </SubmitButton>
+              </form>
+              <form action={resetAuthorizedDevice}>
+                <input type="hidden" name="employee_id" value={employeeId} />
+                <SubmitButton pendingText="Resetting..." className="rounded-lg border border-emerald-200 bg-white px-3 py-2 text-sm font-bold text-bie-700 transition hover:bg-emerald-50 disabled:opacity-50">
+                  Reset device
+                </SubmitButton>
+              </form>
+            </>
+          )}
+        </div>
       </div>
-      <div className="mt-3 flex flex-wrap gap-2">
-        {activeDevice ? (
-          <>
-            <form action={disableAuthorizedDevice}>
-              <input type="hidden" name="employee_id" value={employeeId} />
-              <SubmitButton pendingText="Disabling..." className="rounded-lg border border-red-200 bg-white px-3 py-2 text-sm font-bold text-red-700 transition hover:bg-red-50 disabled:opacity-50">
-                Disable device
-              </SubmitButton>
-            </form>
-            <form action={resetAuthorizedDevice}>
-              <input type="hidden" name="employee_id" value={employeeId} />
-              <SubmitButton pendingText="Resetting..." className="rounded-lg border border-emerald-200 bg-white px-3 py-2 text-sm font-bold text-bie-700 transition hover:bg-emerald-50 disabled:opacity-50">
-                Reset device
-              </SubmitButton>
-            </form>
-          </>
-        ) : (
-          <form action={registerAuthorizedDevice}>
-            <input type="hidden" name="employee_id" value={employeeId} />
-            <SubmitButton pendingText="Registering..." className="rounded-lg bg-bie-700 px-3 py-2 text-sm font-extrabold text-white transition hover:bg-bie-800 disabled:opacity-50">
-              Register this device
-            </SubmitButton>
-          </form>
-        )}
-      </div>
+
+      {pendingRequests.length > 0 && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50/50 p-3">
+          <p className="text-sm font-extrabold text-amber-900 mb-2">Pending Requests ({pendingRequests.length})</p>
+          <div className="flex flex-col gap-3">
+            {pendingRequests.map(req => (
+              <div key={req.id} className="rounded border border-amber-200 bg-white p-3 flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Code</p>
+                  <p className="text-xl font-mono font-black text-bie-700 tracking-[0.1em]">{req.registration_code}</p>
+                  <p className="text-xs font-medium text-slate-600 mt-1">{req.device_name}</p>
+                  <p className="text-xs text-slate-500 mt-1">IP: {req.request_ip || "Unknown"}</p>
+                </div>
+                <div className="flex gap-2 shrink-0">
+                  <form action={approveDeviceRequest}>
+                    <input type="hidden" name="request_id" value={req.id} />
+                    <SubmitButton pendingText="Approving..." className="rounded-lg bg-bie-700 px-3 py-2 text-xs font-bold text-white transition hover:bg-bie-800 disabled:opacity-50">
+                      Approve
+                    </SubmitButton>
+                  </form>
+                  <form action={rejectDeviceRequest}>
+                    <input type="hidden" name="request_id" value={req.id} />
+                    <SubmitButton pendingText="Rejecting..." className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50">
+                      Reject
+                    </SubmitButton>
+                  </form>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

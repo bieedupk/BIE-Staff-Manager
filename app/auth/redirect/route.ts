@@ -30,9 +30,11 @@ export async function GET(request: NextRequest) {
   });
 
   if (!deviceAccess.allowed) {
-    await supabase.auth.signOut();
-    const code = deviceAccess.code === "mobile" ? "employee_mobile" : "unauthorized_device";
-    return NextResponse.redirect(new URL(`/login?error=${code}`, request.url));
+    if (deviceAccess.code === "mobile") {
+      await supabase.auth.signOut();
+      return NextResponse.redirect(new URL("/login?error=employee_mobile", request.url));
+    }
+    return NextResponse.redirect(new URL("/device-access", request.url));
   }
 
   return NextResponse.redirect(new URL(homeForRole(profile.role), request.url));

@@ -11,6 +11,8 @@
     "seed": "tsx scripts/seed-super-admin.ts"
   },
   "dependencies": {
+    "@simplewebauthn/browser": "^14.0.0",
+    "@simplewebauthn/server": "^14.0.2",
     "@supabase/ssr": "0.10.3",
     "@supabase/supabase-js": "2.106.0",
     "lucide-react": "0.468.0",
