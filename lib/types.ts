@@ -61,7 +61,16 @@ export type AuthorizedDevice = {
   id: string;
   employee_id: string;
   device_name: string;
-  device_token_hash: string;
+  device_token_hash: string | null;
+  credential_id: string | null;
+  credential_public_key: string | null;
+  credential_counter: number | null;
+  credential_transports: string[] | null;
+  credential_device_type: string | null;
+  credential_backed_up: boolean | null;
+  approved_at: string | null;
+  approved_by: string | null;
+  last_verified_at: string | null;
   status: "active" | "disabled";
   registered_by: string | null;
   registered_at: string;
@@ -69,6 +78,41 @@ export type AuthorizedDevice = {
   last_ip: string | null;
   last_user_agent: string | null;
   created_at: string;
+};
+
+export type DeviceRegistrationRequestStatus = "pending" | "approved" | "rejected" | "expired";
+
+export type DeviceRegistrationRequest = {
+  id: string;
+  employee_id: string;
+  registration_code: string;
+  credential_id: string;
+  credential_public_key: string;
+  credential_counter: number;
+  transports: string[];
+  credential_device_type: string;
+  credential_backed_up: boolean;
+  device_name: string;
+  request_ip: string | null;
+  request_user_agent: string | null;
+  status: DeviceRegistrationRequestStatus;
+  requested_at: string;
+  expires_at: string;
+  reviewed_at: string | null;
+  reviewed_by: string | null;
+};
+
+export type AuthorizedDeviceSession = {
+  id: string;
+  authorized_device_id: string;
+  employee_id: string;
+  session_token_hash: string;
+  created_at: string;
+  expires_at: string;
+  last_used_at: string | null;
+  last_ip: string | null;
+  last_user_agent: string | null;
+  revoked_at: string | null;
 };
 
 export type AttendanceRecord = {

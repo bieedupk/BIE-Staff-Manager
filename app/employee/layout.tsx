@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { AppShell } from "@/components/layout/app-shell";
 import { currentDeviceRequestInfo, unauthorizedDeviceMessage, verifyEmployeeDeviceAccess } from "@/lib/authorized-devices";
 import { requireEmployeeProfile } from "@/lib/auth";
@@ -29,6 +30,10 @@ export default async function EmployeeLayout({ children }: { children: React.Rea
     logMobileBlocked: true
   });
 
+  if (!deviceAccess.allowed) {
+    redirect("/device-access");
+  }
+
   return (
     <AppShell
       profile={profile}
@@ -38,16 +43,7 @@ export default async function EmployeeLayout({ children }: { children: React.Rea
       avatarUrl={avatarUrl}
       nav={employeeNav.map(([href, label]) => ({ href, label: t(label, locale) }))}
     >
-      {deviceAccess.allowed ? children : <EmployeeAccessBlocked message={deviceAccess.message ?? unauthorizedDeviceMessage} />}
+      {children}
     </AppShell>
-  );
-}
-
-function EmployeeAccessBlocked({ message }: { message: string }) {
-  return (
-    <section className="rounded-lg border border-red-200 bg-white p-5 shadow-soft">
-      <h1 className="text-lg font-extrabold text-slate-950">Access blocked</h1>
-      <p className="mt-2 text-sm font-semibold text-red-700">{message}</p>
-    </section>
   );
 }
