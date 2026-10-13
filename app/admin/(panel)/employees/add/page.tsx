@@ -7,11 +7,10 @@ import { requireAdminProfile } from "@/lib/auth";
 import { ensureDefaultDepartments } from "@/lib/default-departments";
 import { departmentDisplayName } from "@/lib/department-utils";
 import { EMPLOYEE_TYPES } from "@/lib/employee-options";
-import { getOrganizationSettings } from "@/lib/organization-settings";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import type { Department, Profile } from "@/lib/types";
-import { isAdminManagerRole, roleLabel, todayISOInTimezone } from "@/lib/utils";
+import { isAdminManagerRole, roleLabel } from "@/lib/utils";
 
 const roles = ["employee", "supervisor", "admin", "super_admin"];
 const statuses = ["active", "disabled"];
@@ -25,7 +24,6 @@ export default async function AddEmployeePage({
   }>;
 }) {
   const currentProfile = await requireAdminProfile();
-  const today = todayISOInTimezone((await getOrganizationSettings()).timezone);
   const canManageEmployees = isAdminManagerRole(currentProfile.role);
 
   if (canManageEmployees) {
@@ -98,7 +96,10 @@ export default async function AddEmployeePage({
                 <Select name="role" label="System Role" options={roles} defaultValue="employee" />
                 <Select name="status" label="Account Status" options={statuses} defaultValue="active" />
                 <Input name="joining_date" label="Joining date" type="date" />
-                <Input name="system_entry_date" label="System entry date (attendance starts)" type="date" defaultValue={today} required />
+                <div>
+                  <Input name="system_entry_date" label="Attendance starts on" type="date" required />
+                  <p className="mt-1 text-xs text-slate-500">Select the first day to count attendance. This can differ from the joining date.</p>
+                </div>
                 <label className="grid gap-1 text-sm font-bold text-slate-700">
                   Weekly / rotation off days
                   <select name="attendance_schedule" required defaultValue="" className="min-h-11 rounded-lg border border-slate-300 px-3 bg-white">

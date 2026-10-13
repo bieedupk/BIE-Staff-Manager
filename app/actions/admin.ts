@@ -264,8 +264,7 @@ export async function createEmployee(formData: FormData) {
     const fullName = String(formData.get("full_name") || "").trim();
     const fatherName = fatherNameFromForm(formData);
     const joiningDate = employeeDate(formData.get("joining_date"), "Joining date");
-    const systemEntryDate = employeeDate(formData.get("system_entry_date"), "System entry date") ??
-      todayISOInTimezone((await getOrganizationSettings()).timezone);
+    const systemEntryDate = employeeDate(formData.get("system_entry_date"), "System entry date", true);
     const attendanceSchedule = attendanceScheduleFromForm(formData);
     const role = normalizeRole(String(formData.get("role") || "employee"));
     const status = normalizeEmployeeStatus(String(formData.get("status") || "active"));
