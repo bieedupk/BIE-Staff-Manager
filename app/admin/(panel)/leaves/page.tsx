@@ -64,11 +64,15 @@ export default async function AdminLeavesPage() {
 
   const leaveSummaryByEmployee = await getApprovedLeaveYearSummary(year, today);
   const employeesWithRequests = new Map<string, string>(leaves.filter((leave) => leave.employee_profile).map((leave): [string, string] => [leave.employee_id, leave.employee_profile!.full_name]));
-  const approvedRotation = new Map<string, LeaveRequest>();
+  const approvedRotation = new Map<string, LeaveRequest[]>();
   for (const leave of leaves) {
     if (leave.leave_type !== "Rotation Off" || leave.status !== "Approved") continue;
-    const previous = approvedRotation.get(leave.employee_id);
-    if (!previous || leave.to_date > previous.to_date) approvedRotation.set(leave.employee_id, leave);
+    const requests = approvedRotation.get(leave.employee_id) ?? [];
+    requests.push(leave);
+    approvedRotation.set(leave.employee_id, requests);
+  }
+  for (const requests of approvedRotation.values()) {
+    requests.sort((a, b) => b.to_date.localeCompare(a.to_date));
   }
 
   return (
@@ -102,7 +106,10 @@ export default async function AdminLeavesPage() {
                     {leave.leave_type} · {formatDate(leave.from_date)} to {formatDate(leave.to_date)}
                   </p>
                   {leave.leave_type === "Rotation Off" && leave.status === "Pending" ? (
-                    <RotationEligibilityNotice leave={leave} lastApproved={approvedRotation.get(leave.employee_id)} today={today} />
+                    <RotationEligibilityNotice
+                      leave={leave}
+                      lastApproved={approvedRotation.get(leave.employee_id)?.find((approved) => approved.to_date < leave.from_date)}
+                    />
                   ) : null}
                 </div>
                 <StatusBadge tone="leave">{leave.status}</StatusBadge>
@@ -171,10 +178,9 @@ export default async function AdminLeavesPage() {
   );
 }
 
-function RotationEligibilityNotice({ leave, lastApproved, today }: {
+function RotationEligibilityNotice({ leave, lastApproved }: {
   leave: LeaveRequest;
   lastApproved?: LeaveRequest;
-  today: string;
 }) {
   const profile = leave.employee_profile;
   const plan = rotationPlan(profile?.attendance_schedule);
@@ -187,14 +193,13 @@ function RotationEligibilityNotice({ leave, lastApproved, today }: {
   const previous = lastApproved && lastApproved.to_date >= planStart && lastApproved.id !== leave.id ? lastApproved : null;
   const anchor = previous ? previous.to_date : planStart;
   const eligibleOn = rotationEligibilityDate(anchor, profile.attendance_schedule)!;
-  const elapsed = Math.max(0, daysBetweenISO(anchor, today));
-  const remaining = Math.max(0, daysBetweenISO(today, eligibleOn));
+  const daysToRequestedStart = Math.max(0, daysBetweenISO(anchor, leave.from_date));
+  const daysEarly = Math.max(0, daysBetweenISO(leave.from_date, eligibleOn));
   const requestedDays = daysBetweenISO(leave.from_date, leave.to_date) + 1;
-  const earlyRequest = today < eligibleOn;
   const earlyDates = leave.from_date < eligibleOn;
   const exceedsPlan = requestedDays > plan.days;
 
-  const needsAttention = earlyRequest || earlyDates || exceedsPlan;
+  const needsAttention = earlyDates || exceedsPlan;
 
   return (
     <div className={`mt-3 rounded-xl border p-4 sm:p-5 ${needsAttention ? "border-amber-300 bg-amber-50" : "border-emerald-200 bg-emerald-50"}`}>
@@ -204,7 +209,7 @@ function RotationEligibilityNotice({ leave, lastApproved, today }: {
           <p className="mt-1 text-sm leading-relaxed text-slate-700">These dates help you review the request.</p>
         </div>
         <span className={`rounded-full px-3 py-1.5 text-sm font-bold ${needsAttention ? "bg-amber-200 text-amber-950" : "bg-emerald-200 text-emerald-950"}`}>
-          {earlyRequest ? "Not yet eligible" : needsAttention ? "Review request" : "Usual criteria met"}
+          {earlyDates ? "Requested start is early" : needsAttention ? "Review request" : "Usual criteria met"}
         </span>
       </div>
 
@@ -213,15 +218,14 @@ function RotationEligibilityNotice({ leave, lastApproved, today }: {
         <RotationDetail label="Requested leave" value={`${requestedDays} day(s)`} />
         <RotationDetail label="Usual allowance" value={`${plan.days} day(s)`} />
         <RotationDetail label={previous ? "Last rotation leave ended" : "Rotation count started"} value={formatDate(anchor)} />
-        <RotationDetail label="Time since that date" value={`${elapsed} day(s)`} />
+        <RotationDetail label="Days from that date to requested leave" value={`${daysToRequestedStart} day(s)`} />
         <RotationDetail label="Next usual eligibility" value={formatDate(eligibleOn)} />
       </dl>
 
       {needsAttention ? (
         <div className="mt-4 rounded-lg border border-amber-200 bg-white p-3 text-sm leading-relaxed text-amber-950">
           <p className="font-extrabold">Points to review</p>
-          {earlyRequest ? <p className="mt-2">The usual eligibility date is {remaining} day(s) away.</p> : null}
-          {earlyDates ? <p className="mt-2">Requested leave begins before the usual eligibility date.</p> : null}
+          {earlyDates ? <p className="mt-2">Requested leave begins {daysEarly} day(s) before the usual eligibility date.</p> : null}
           {exceedsPlan ? <p className="mt-2">This request exceeds the usual {plan.days}-day allowance.</p> : null}
         </div>
       ) : null}
