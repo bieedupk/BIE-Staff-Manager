@@ -59,8 +59,8 @@ export async function applyLeave(formData: FormData) {
   const profile = await requireProfile();
   const supabase = await createClient();
   const leaveType = String(formData.get("leave_type") || "");
-  if (leaveType === "Rotation Off" && !["monthly_four", "bimonthly_eight"].includes(profile.attendance_schedule)) {
-    throw new Error("Rotation off requests require a monthly or two-month plan.");
+  if (leaveType === "Rotation Off" && !["fortnight_two", "monthly_four", "bimonthly_eight"].includes(profile.attendance_schedule)) {
+    throw new Error("Rotation off requests require a 15-day, monthly or two-month plan.");
   }
 
   const { error } = await supabase.from("leave_requests").insert({

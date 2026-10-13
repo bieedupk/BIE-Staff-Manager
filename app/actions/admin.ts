@@ -34,7 +34,7 @@ function fatherNameFromForm(formData: FormData) {
 
 function attendanceScheduleFromForm(formData: FormData): AttendanceSchedule {
   const schedule = String(formData.get("attendance_schedule") || "");
-  if (["weekly_friday", "monthly_four", "bimonthly_eight", "unspecified"].includes(schedule)) {
+  if (["weekly_friday", "fortnight_two", "monthly_four", "bimonthly_eight", "unspecified"].includes(schedule)) {
     return schedule as AttendanceSchedule;
   }
   throw new Error("Please select the employee's weekly or rotation off-day plan.");

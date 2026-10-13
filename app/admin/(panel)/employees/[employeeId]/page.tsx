@@ -137,7 +137,7 @@ export default async function AdminEmployeeProfilePage({
                 <ProfileItem label="Phone" value={employee.phone || "-"} />
                 <ProfileItem label="Joining date" value={formatDate(employee.joining_date)} />
                 <ProfileItem label="System entry date" value={formatDate(employee.system_entry_date)} />
-                <ProfileItem label="Off-day plan" value={{ weekly_friday: "Friday off every week", monthly_four: "Four days after one month (request dates)", bimonthly_eight: "Eight days after two months (request dates)", unspecified: "Not set" }[employee.attendance_schedule]} />
+                <ProfileItem label="Off-day plan" value={{ weekly_friday: "Friday off every week", fortnight_two: "Two days after 15 days (request dates)", monthly_four: "Four days after one month (request dates)", bimonthly_eight: "Eight days after two months (request dates)", unspecified: "Not set" }[employee.attendance_schedule]} />
               </dl>
             </div>
 

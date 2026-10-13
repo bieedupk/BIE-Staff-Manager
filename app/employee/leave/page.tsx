@@ -1,12 +1,16 @@
 import { applyLeave } from "@/app/actions/leaves";
 import { EmptyState } from "@/components/ui/empty-state";
+import { LeaveTypeSummary } from "@/components/leave-type-summary";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { SubmitButton } from "@/components/ui/submit-button";
+import { rotationPlan } from "@/lib/rotation-policy";
+import { getApprovedLeaveYearSummary } from "@/lib/leave-year-summary";
+import { getOrganizationSettings } from "@/lib/organization-settings";
 import { requireEmployeeProfile } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import type { LeaveRequest } from "@/lib/types";
-import { formatDate } from "@/lib/utils";
+import { formatDate, todayISOInTimezone } from "@/lib/utils";
 
 const leaveTypes = ["Casual", "Sick", "Annual", "Emergency", "Other"];
 
@@ -19,15 +23,23 @@ export default async function EmployeeLeavePage() {
     .eq("employee_id", profile.id)
     .order("created_at", { ascending: false });
   const leaves = (data ?? []) as LeaveRequest[];
+  const plan = rotationPlan(profile.attendance_schedule);
+  const settings = await getOrganizationSettings();
+  const today = todayISOInTimezone(settings.timezone);
+  const year = Number(today.slice(0, 4));
+  const approvedCounts = await getApprovedLeaveYearSummary(year, today, profile.id);
 
   return (
     <>
       <PageHeader title="Leave" subtitle="Apply for leave and see approval status." backHref="/employee/dashboard" />
+      <section className="mb-5 rounded-lg border border-emerald-100 bg-white p-4 shadow-soft">
+        <LeaveTypeSummary year={year} counts={approvedCounts.get(profile.id) ?? []} />
+      </section>
       <section className="rounded-lg border border-emerald-100 bg-white p-4 shadow-soft">
         <h2 className="font-extrabold text-slate-950">Apply for Leave</h2>
-        {profile.attendance_schedule === "monthly_four" || profile.attendance_schedule === "bimonthly_eight" ? (
+        {plan ? (
           <p className="mt-2 text-sm text-slate-600">
-            Your rotation plan is {profile.attendance_schedule === "monthly_four" ? "four days after one month" : "eight days after two months"}.
+            Your rotation plan is {plan.label}.
             Request the exact dates as Rotation Off; approved dates will be excluded from absence totals.
           </p>
         ) : null}
@@ -40,7 +52,7 @@ export default async function EmployeeLeavePage() {
                   {type}
                 </option>
               ))}
-              {profile.attendance_schedule === "monthly_four" || profile.attendance_schedule === "bimonthly_eight" ? (
+              {plan ? (
                 <option value="Rotation Off">Rotation Off</option>
               ) : null}
             </select>
