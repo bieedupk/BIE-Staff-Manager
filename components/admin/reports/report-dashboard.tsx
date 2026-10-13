@@ -9,7 +9,7 @@ import { PunctualityLineChart } from "./punctuality-line-chart";
 import { AttendanceRateCard } from "./attendance-rate-card";
 import { ReportStatusPanel } from "./report-status-panel";
 import { parseTimeToMinutes } from "@/lib/utils";
-import type { ReportComparison, MetricComparison } from "@/lib/attendance-report";
+import type { DailyAttendanceRow, ReportComparison, MetricComparison } from "@/lib/attendance-report";
 
 type DashboardProps = {
   employeeId: string;
@@ -70,7 +70,9 @@ export function ReportDashboard({
         activityData.push({
           label: existing.month.substring(0, 3),
           worked: existing.report.totals.totalWorkingMinutes,
-          scheduled: existing.report.totals.eligibleDays * scheduledMins,
+          scheduled: existing.report.daily
+            .filter((row: DailyAttendanceRow) => !row.isPending && !row.isLeave)
+            .reduce((sum: number, row: DailyAttendanceRow) => sum + row.scheduledMinutes, 0),
           overtime: existing.report.totals.totalOvertimeMinutes,
           dateStr: existing.month,
           isAbsent: false,
@@ -112,7 +114,7 @@ export function ReportDashboard({
         activityData.push({
           label,
           worked: existing.workedMinutes,
-          scheduled: existing.isPending ? 0 : scheduledMins,
+          scheduled: existing.isPending ? 0 : existing.scheduledMinutes,
           overtime: existing.overtimeMinutes,
           dateStr: formatDate(existing.date),
           isAbsent: existing.isAbsent || false,
@@ -125,10 +127,10 @@ export function ReportDashboard({
         
         punctualityData.push({
           label,
-          actualMinutes: existing.checkIn ? parseTimeToMinutes(formatTime(existing.checkIn, timezone)) : null,
-          scheduledMinutes: 8 * 60 + 30,
-          actualTimeStr: existing.checkIn ? formatTime(existing.checkIn, timezone) : null,
-          scheduledTimeStr: "08:30 AM",
+          actualMinutes: existing.checkIn ? parseTimeToMinutes(formatTime(existing.checkIn, existing.timezone)) : null,
+          scheduledMinutes: existing.scheduledStartMinutes,
+          actualTimeStr: existing.checkIn ? formatTime(existing.checkIn, existing.timezone) : null,
+          scheduledTimeStr: `${Math.floor(existing.scheduledStartMinutes / 60) % 12 || 12}:${String(existing.scheduledStartMinutes % 60).padStart(2, "0")} ${existing.scheduledStartMinutes >= 720 ? "PM" : "AM"}`,
           isLate: existing.isLate || false,
           isAbsent: existing.isAbsent || false,
           isPresent: existing.isPresent || false,
@@ -154,9 +156,9 @@ export function ReportDashboard({
         punctualityData.push({
           label,
           actualMinutes: null,
-          scheduledMinutes: 8 * 60 + 30,
+          scheduledMinutes: 0,
           actualTimeStr: null,
-          scheduledTimeStr: "08:30 AM",
+          scheduledTimeStr: "-",
           isLate: false,
           isAbsent: false,
           isPresent: false,
@@ -323,7 +325,7 @@ export function ReportDashboard({
               value={formatDurationMinutes(currentAvgMins)} 
               comparisonText="Avg per day"
               accent="blue"
-              sparkData={workingHoursData.map(d => Math.min(100, (d.value / Math.max(scheduledMins, 1)) * 100))}
+              sparkData={workingHoursData.map(d => Math.min(100, (d.value / Math.max(d.reference || scheduledMins, 1)) * 100))}
             />
           </div>
           <div className="motion-safe:animate-fade-up opacity-0" style={{ animationDelay: '400ms' }}>
@@ -440,10 +442,10 @@ export function ReportDashboard({
                     <tr key={row.date} className="transition hover:bg-slate-50">
                       <td className="px-5 py-3 font-semibold text-slate-900">{formatDate(row.date)}</td>
                       <td className="px-5 py-3 text-slate-600">
-                        {row.isPending ? "-" : (row.checkIn ? formatTime(row.checkIn, timezone) : "-")}
+                        {row.isPending ? "-" : (row.checkIn ? formatTime(row.checkIn, row.timezone) : "-")}
                       </td>
                       <td className="px-5 py-3 text-slate-600">
-                        {row.isPending ? "-" : (row.checkOut ? formatTime(row.checkOut, timezone) : "-")}
+                        {row.isPending ? "-" : (row.checkOut ? formatTime(row.checkOut, row.timezone) : "-")}
                       </td>
                       <td className="px-5 py-3 text-slate-700 font-medium">
                         {formatDurationMinutes(row.workedMinutes)}

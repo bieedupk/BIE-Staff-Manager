@@ -12,8 +12,9 @@ import { requireAdminManagerProfile, requireProfile } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { getOrganizationSettings } from "@/lib/organization-settings";
+import { officeTimingForDate } from "@/lib/office-timing";
 import type { Profile } from "@/lib/types";
-import { getHalfDayThresholdHours, getOrgCurrentTimeMinutes, isDutyEndedForDate, parseTimeToMinutes, todayISOInTimezone } from "@/lib/utils";
+import { getHalfDayThresholdHours, isDutyEndedForDate, parseTimeToMinutes, todayISOInTimezone } from "@/lib/utils";
 
 function attendanceRedirectPath(formData: FormData) {
   const sourcePath = String(formData.get("source_path") || "");
@@ -217,28 +218,6 @@ export async function checkOut(formData: FormData) {
 
     if (error) throw new Error(error.message);
 
-    // Re-evaluate Half Day status based on organization-configured duty schedule
-    const settings = await getOrganizationSettings();
-    const halfDayThreshold = getHalfDayThresholdHours(settings);
-    const orgToday = todayISOInTimezone(settings.timezone);
-
-    const { data: updatedRecord } = await supabase
-      .from("attendance")
-      .select("id, total_hours, status")
-      .eq("employee_id", profile.id)
-      .eq("work_date", orgToday)
-      .maybeSingle();
-
-    if (updatedRecord && updatedRecord.total_hours !== null) {
-      const workedHours = Number(updatedRecord.total_hours);
-      if (workedHours <= halfDayThreshold && updatedRecord.status !== "Half Day") {
-        await supabase
-          .from("attendance")
-          .update({ status: "Half Day" })
-          .eq("id", updatedRecord.id);
-      }
-    }
-
     await logAudit("attendance check out", "attendance", null, { employee_id: profile.id }, { actorId: profile.id });
   } catch (error) {
     type = "error";
@@ -286,6 +265,7 @@ export async function correctAttendance(formData: FormData) {
   if (!isValidISODate(correctionDate)) {
     redirectWithAttendanceCorrectionMessage(returnPath, "error", "Correction date is invalid.");
   }
+  const workSettings = officeTimingForDate(settings, correctionDate);
 
   if (!id) {
     redirectWithAttendanceCorrectionMessage(returnPath, "error", "Attendance record id is required.");
@@ -317,7 +297,7 @@ export async function correctAttendance(formData: FormData) {
 
   // 2. Check-in validation
   if (checkInTime) {
-    const dutyStartMinutes = parseTimeToMinutes(settings.office_start_time);
+    const dutyStartMinutes = parseTimeToMinutes(workSettings.office_start_time);
     const checkInMinutes = parseTimeToMinutes(checkInTime);
     if (dutyStartMinutes !== null && checkInMinutes !== null && checkInMinutes < dutyStartMinutes) {
       redirectWithAttendanceCorrectionMessage(
@@ -332,8 +312,8 @@ export async function correctAttendance(formData: FormData) {
   const checkOutDate = isOvernight ? addDaysISO(correctionDate, 1) : correctionDate;
 
   // Ensure timestamps are not in the future compared to absolute current time
-  let checkInAt = checkInTime ? buildTimestampFromDateAndTime(correctionDate, checkInTime, settings.timezone) : null;
-  let checkOutAt = checkOutTime ? buildTimestampFromDateAndTime(checkOutDate, checkOutTime, settings.timezone) : null;
+  const checkInAt = checkInTime ? buildTimestampFromDateAndTime(correctionDate, checkInTime, workSettings.timezone) : null;
+  const checkOutAt = checkOutTime ? buildTimestampFromDateAndTime(checkOutDate, checkOutTime, workSettings.timezone) : null;
 
   const now = new Date();
   if (checkInAt && new Date(checkInAt) > now) {
@@ -363,7 +343,7 @@ export async function correctAttendance(formData: FormData) {
     redirectWithAttendanceCorrectionMessage(returnPath, "error", "Employee id is required for synthetic record correction.");
   }
 
-  if (isSynthetic && !isDutyEndedForDate(correctionDate, settings)) {
+  if (isSynthetic && !isDutyEndedForDate(correctionDate, workSettings)) {
     redirectWithAttendanceCorrectionMessage(
       returnPath,
       "error",
@@ -387,8 +367,8 @@ export async function correctAttendance(formData: FormData) {
   else if (outcome === "Leave") finalStatus = "Leave";
   else {
     const checkInMinutes = checkInTime ? parseTimeToMinutes(checkInTime) : null;
-    const lateThresholdMinutes = parseTimeToMinutes(settings.late_threshold_time);
-    const halfDayThreshold = getHalfDayThresholdHours(settings);
+    const lateThresholdMinutes = parseTimeToMinutes(workSettings.late_threshold_time);
+    const halfDayThreshold = getHalfDayThresholdHours(workSettings);
 
     if (finalTotalHours !== null && finalTotalHours <= halfDayThreshold) {
       finalStatus = "Half Day";

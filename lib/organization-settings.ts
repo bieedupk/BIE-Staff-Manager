@@ -1,7 +1,7 @@
 import "server-only";
 
 import { createAdminClient } from "@/lib/supabase/admin";
-import type { OrganizationSettings } from "@/lib/types";
+import type { OfficeTimingPeriod, OrganizationSettings } from "@/lib/types";
 
 export const defaultOrganizationSettings: OrganizationSettings = {
   id: "00000000-0000-0000-0000-000000000001",
@@ -16,18 +16,20 @@ export const defaultOrganizationSettings: OrganizationSettings = {
 };
 
 export async function getOrganizationSettings() {
-  try {
-    const admin = createAdminClient();
-    const { data, error } = await admin
+  const admin = createAdminClient();
+  const { data, error } = await admin
       .from("organization_settings")
       .select("*")
       .eq("id", defaultOrganizationSettings.id)
       .maybeSingle<OrganizationSettings>();
 
-    if (error || !data) return defaultOrganizationSettings;
+  if (error || !data) throw new Error("Office settings could not be loaded.");
 
-    return data;
-  } catch {
-    return defaultOrganizationSettings;
-  }
+  const { data: history, error: historyError } = await admin
+    .from("office_timing_history")
+    .select("effective_from, timezone, office_start_time, office_end_time, late_threshold_time")
+    .order("effective_from", { ascending: true });
+  if (historyError || !history?.length) throw new Error("Office timing history could not be loaded. Apply migration 027 first.");
+
+  return { ...data, office_timing_history: history as OfficeTimingPeriod[] };
 }

@@ -7,6 +7,7 @@ import { Download } from "lucide-react";
 import { attendanceDisplayStatus, deriveAttendanceFlags, getTodayAttendanceForEmployee, getRecentAttendanceForEmployee, buildCompleteTimelineWithAbsent, getApprovedLeaveDates } from "@/lib/attendance";
 import { requireEmployeeProfile } from "@/lib/auth";
 import { getOrganizationSettings } from "@/lib/organization-settings";
+import { officeTimingForDate } from "@/lib/office-timing";
 import { createClient } from "@/lib/supabase/server";
 import type { AttendanceRecord, OrganizationSettings } from "@/lib/types";
 import { formatDate, formatTime, formatWorkedDuration, todayISOInTimezone } from "@/lib/utils";
@@ -207,7 +208,7 @@ function AttendanceHistoryRecord({
   settings
 }: {
   record: AttendanceRecord;
-  settings: Pick<OrganizationSettings, "timezone" | "late_threshold_time" | "office_start_time" | "office_end_time">;
+  settings: OrganizationSettings;
 }) {
   const flags = deriveAttendanceFlags(record, settings);
   const displayStatuses = flags.displayStatuses.length ? flags.displayStatuses : [record.status];
@@ -225,8 +226,8 @@ function AttendanceHistoryRecord({
         </div>
       </div>
       <div className="mt-2 grid gap-1 text-sm text-slate-600">
-        <p><span className="font-medium">Check in:</span> {formatTime(record.check_in_at, settings.timezone)}</p>
-        <p><span className="font-medium">Check out:</span> {formatTime(record.check_out_at, settings.timezone)}</p>
+        <p><span className="font-medium">Check in:</span> {formatTime(record.check_in_at, officeTimingForDate(settings, record.work_date).timezone)}</p>
+        <p><span className="font-medium">Check out:</span> {formatTime(record.check_out_at, officeTimingForDate(settings, record.work_date).timezone)}</p>
         <p><span className="font-medium">Total:</span> {formatWorkedDuration(record.total_hours)}</p>
       </div>
     </article>

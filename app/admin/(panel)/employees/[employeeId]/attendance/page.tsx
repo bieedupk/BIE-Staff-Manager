@@ -235,10 +235,10 @@ export default async function AdminEmployeeAttendancePage({
                     <tr key={row.date} className="transition hover:bg-slate-50">
                       <td className="px-5 py-3 font-semibold text-slate-900">{formatDate(row.date)}</td>
                       <td className="px-5 py-3 text-slate-600">
-                        {row.isPending ? "-" : (row.checkIn ? formatTime(row.checkIn, timezone) : "-")}
+                        {row.isPending ? "-" : (row.checkIn ? formatTime(row.checkIn, row.timezone) : "-")}
                       </td>
                       <td className="px-5 py-3 text-slate-600">
-                        {row.isPending ? "-" : (row.checkOut ? formatTime(row.checkOut, timezone) : "-")}
+                        {row.isPending ? "-" : (row.checkOut ? formatTime(row.checkOut, row.timezone) : "-")}
                       </td>
                       <td className="px-5 py-3 text-slate-700 font-medium">
                         {formatDurationMinutes(row.workedMinutes)}

@@ -9,6 +9,7 @@ import { deriveAttendanceFlags, formatDurationFromHours, getRecentAttendanceForA
 import { requireAdminProfile } from "@/lib/auth";
 import { departmentTextForProfile, fetchEmployeeDepartmentsByEmployee } from "@/lib/employee-departments";
 import { getOrganizationSettings } from "@/lib/organization-settings";
+import { officeTimingForDate } from "@/lib/office-timing";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import type { AttendanceRecord, AttendanceStatus, Profile } from "@/lib/types";
@@ -89,9 +90,6 @@ export default async function AdminAttendancePage({ searchParams }: Props) {
 
   // Compute org-local current time (HH:MM) for checkout constraint
   const currentOrgTimeHHMM = getOrgCurrentTimeHHMM(settings.timezone);
-
-  // Strip seconds from "09:00:00" → "09:00"
-  const dutyStartHHMM = settings.office_start_time?.slice(0, 5) ?? "";
 
   // Fetch approved leaves
   const fetchStartDate = dateParamProvided ? selectedDate : subtractDaysISO(today, DEFAULT_HISTORY_DAYS);
@@ -251,11 +249,11 @@ export default async function AdminAttendancePage({ searchParams }: Props) {
                     </div>
                     <div>
                       <p className="font-medium text-slate-700">Check in</p>
-                      <p>{formatTime(record.check_in_at, settings.timezone)}</p>
+                      <p>{formatTime(record.check_in_at, officeTimingForDate(settings, record.work_date).timezone)}</p>
                     </div>
                     <div>
                       <p className="font-medium text-slate-700">Check out</p>
-                      <p>{formatTime(record.check_out_at, settings.timezone)}</p>
+                      <p>{formatTime(record.check_out_at, officeTimingForDate(settings, record.work_date).timezone)}</p>
                     </div>
                     <div>
                       <p className="font-medium text-slate-700">Total hours</p>
@@ -282,10 +280,10 @@ export default async function AdminAttendancePage({ searchParams }: Props) {
                           )}
                           <AttendanceCorrectionHours
                             initialCorrectionDate={record.work_date || selectedDate}
-                            initialCheckInTime={formatTimeInputValue(record.check_in_at, settings.timezone)}
-                            initialCheckOutTime={formatTimeInputValue(record.check_out_at, settings.timezone)}
+                            initialCheckInTime={formatTimeInputValue(record.check_in_at, officeTimingForDate(settings, record.work_date).timezone)}
+                            initialCheckOutTime={formatTimeInputValue(record.check_out_at, officeTimingForDate(settings, record.work_date).timezone)}
                             initialStatus={record.status}
-                            dutyStartTime={dutyStartHHMM}
+                            officeTimingHistory={settings.office_timing_history!}
                             todayDate={today}
                             timezone={settings.timezone}
                             serverNow={new Date().toISOString()}
