@@ -236,7 +236,7 @@ export default async function AdminAttendancePage({ searchParams }: Props) {
                     </div>
                     <div className="flex flex-wrap justify-end gap-2">
                       {(record.work_date === today && record.check_in_at && attendanceFlagsByRecordId.get(record.id)?.isPending
-                        ? ["Checked In"]
+                        ? (attendanceFlagsByRecordId.get(record.id)?.isLate ? ["Checked In", "Late"] : ["Checked In"])
                         : (attendanceFlagsByRecordId.get(record.id)?.displayStatuses ?? [record.status])).map((status) => (
                         <StatusBadge key={status} tone="attendance">
                           {status}
