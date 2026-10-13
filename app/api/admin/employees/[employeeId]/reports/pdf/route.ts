@@ -99,7 +99,9 @@ export async function GET(
       email: employee.email,
       department: employee.department,
       department_id: employee.department_id,
-      designation: employee.designation
+      designation: employee.designation,
+      joining_date: employee.joining_date,
+      system_entry_date: employee.system_entry_date
     };
 
     const currentTimeline = buildCompleteTimelineWithAbsent(

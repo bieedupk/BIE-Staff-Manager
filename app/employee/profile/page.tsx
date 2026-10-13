@@ -48,9 +48,12 @@ export default async function EmployeeProfilePage() {
               </h3>
               <dl className="grid gap-3">
                 <ProfileItem label="Full name" value={profile.full_name} />
+                <ProfileItem label="Father's name" value={profile.father_name || "-"} />
                 <ProfileItem label="Email" value={profile.email} />
                 <ProfileItem label="Phone" value={profile.phone || "-"} />
                 <ProfileItem label="Joining date" value={formatDate(profile.joining_date)} />
+                <ProfileItem label="System entry date" value={formatDate(profile.system_entry_date)} />
+                <ProfileItem label="Off-day plan" value={{ weekly_friday: "Friday off every week", monthly_four: "Four days after one month (request dates)", bimonthly_eight: "Eight days after two months (request dates)", unspecified: "Not set" }[profile.attendance_schedule]} />
               </dl>
             </div>
 

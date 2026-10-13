@@ -8,9 +8,37 @@ import { departmentDisplayName } from "@/lib/department-utils";
 import { ensureDefaultDepartments } from "@/lib/default-departments";
 import { sendEmployeeWelcomeEmail } from "@/lib/email/employee-welcome";
 import { fetchEmployeeDepartmentsByEmployee } from "@/lib/employee-departments";
+import { getOrganizationSettings } from "@/lib/organization-settings";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
-import type { Department, EmployeeStatus, Profile, UserRole, WelcomeEmailMode } from "@/lib/types";
+import type { AttendanceSchedule, Department, EmployeeStatus, Profile, UserRole, WelcomeEmailMode } from "@/lib/types";
+import { todayISOInTimezone } from "@/lib/utils";
+
+function employeeDate(value: FormDataEntryValue | null, label: string, required: true): string;
+function employeeDate(value: FormDataEntryValue | null, label: string, required?: false): string | null;
+function employeeDate(value: FormDataEntryValue | null, label: string, required = false): string | null {
+  const date = String(value || "").trim();
+  if (!date && !required) return null;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(Date.parse(`${date}T00:00:00Z`)) ||
+    new Date(`${date}T00:00:00Z`).toISOString().slice(0, 10) !== date) {
+    throw new Error(`${label} must be a valid date.`);
+  }
+  return date;
+}
+
+function fatherNameFromForm(formData: FormData) {
+  const name = String(formData.get("father_name") || "").trim();
+  if (name.length > 200) throw new Error("Father's name must be at most 200 characters.");
+  return name || null;
+}
+
+function attendanceScheduleFromForm(formData: FormData): AttendanceSchedule {
+  const schedule = String(formData.get("attendance_schedule") || "");
+  if (["weekly_friday", "monthly_four", "bimonthly_eight", "unspecified"].includes(schedule)) {
+    return schedule as AttendanceSchedule;
+  }
+  throw new Error("Please select the employee's weekly or rotation off-day plan.");
+}
 
 function requireAdminManager(role: UserRole) {
   if (role !== "super_admin" && role !== "admin") {
@@ -234,6 +262,11 @@ export async function createEmployee(formData: FormData) {
     const email = String(formData.get("email") || "").trim().toLowerCase();
     const password = String(formData.get("password") || "");
     const fullName = String(formData.get("full_name") || "").trim();
+    const fatherName = fatherNameFromForm(formData);
+    const joiningDate = employeeDate(formData.get("joining_date"), "Joining date");
+    const systemEntryDate = employeeDate(formData.get("system_entry_date"), "System entry date") ??
+      todayISOInTimezone((await getOrganizationSettings()).timezone);
+    const attendanceSchedule = attendanceScheduleFromForm(formData);
     const role = normalizeRole(String(formData.get("role") || "employee"));
     const status = normalizeEmployeeStatus(String(formData.get("status") || "active"));
     const welcomeEmailMode = normalizeWelcomeEmailMode(String(formData.get("welcome_email_mode") || "automatic"));
@@ -242,6 +275,7 @@ export async function createEmployee(formData: FormData) {
     const responsibilities = String(formData.get("responsibilities") || "").trim() || null;
 
     requireAssignableRole(currentProfile.role, role);
+    if (role === "employee" && attendanceSchedule === "unspecified") throw new Error("Please select an attendance schedule.");
 
     if (!fullName) throw new Error("Full name is required.");
     if (!email) throw new Error("Email is required.");
@@ -266,6 +300,7 @@ export async function createEmployee(formData: FormData) {
     const { error: profileError } = await admin.from("profiles").insert({
       id: authData.user.id,
       full_name: fullName,
+      father_name: fatherName,
       email,
       phone: String(formData.get("phone") || "").trim() || null,
       role,
@@ -275,7 +310,10 @@ export async function createEmployee(formData: FormData) {
       employee_type: employeeType,
       responsibilities,
       supervisor_id: supervisorId,
-      joining_date: String(formData.get("joining_date") || "") || null,
+      joining_date: joiningDate,
+      system_entry_date: systemEntryDate,
+      attendance_schedule: attendanceSchedule,
+      schedule_effective_from: systemEntryDate,
       status,
       welcome_email_mode: welcomeEmailMode,
       welcome_email_status: "pending"
@@ -295,7 +333,7 @@ export async function createEmployee(formData: FormData) {
       action: "employee_created",
       entity_type: "profiles",
       entity_id: authData.user.id,
-      details: { email, role }
+      details: { email, role, joining_date: joiningDate, system_entry_date: systemEntryDate, attendance_schedule: attendanceSchedule }
     });
 
     if (auditError) {
@@ -411,7 +449,13 @@ export async function updateEmployee(formData: FormData) {
     const status = normalizeEmployeeStatus(String(formData.get("status") || "active"));
     const employeeType = String(formData.get("employee_type") || "").trim() || null;
     const responsibilities = String(formData.get("responsibilities") || "").trim() || null;
+    const fatherName = fatherNameFromForm(formData);
+    const joiningDate = employeeDate(formData.get("joining_date"), "Joining date");
+    const systemEntryDate = employeeDate(formData.get("system_entry_date"), "System entry date", true);
+    const attendanceSchedule = attendanceScheduleFromForm(formData);
     requireAssignableRole(currentProfile.role, role);
+    if (role === "employee" && attendanceSchedule === "unspecified") throw new Error("Please select an attendance schedule.");
+    const today = todayISOInTimezone((await getOrganizationSettings()).timezone);
     await ensureDefaultDepartments();
     const { departments, primaryDepartment, otherDepartmentText } = await resolveDepartmentSelection(formData);
 
@@ -434,10 +478,15 @@ export async function updateEmployee(formData: FormData) {
       throw new Error("Only super admin can update a super admin account.");
     }
 
+    // The initial plan describes this employee's schedule from their system entry.
+    // Later plan changes take effect today, keeping old attendance rates stable.
+    const scheduleEffectiveFrom = existingProfile.attendance_schedule === "unspecified" ? systemEntryDate : today;
+
     const { error } = await admin
       .from("profiles")
       .update({
         full_name: String(formData.get("full_name") || "").trim(),
+        father_name: fatherName,
         phone: String(formData.get("phone") || "").trim() || null,
         role,
         department: departmentDisplayName(primaryDepartment.name),
@@ -446,7 +495,10 @@ export async function updateEmployee(formData: FormData) {
         employee_type: employeeType,
         responsibilities,
         supervisor_id: String(formData.get("supervisor_id") || "") || null,
-        joining_date: String(formData.get("joining_date") || "") || null,
+        joining_date: joiningDate,
+        system_entry_date: systemEntryDate,
+        attendance_schedule: attendanceSchedule,
+        schedule_effective_from: existingProfile.attendance_schedule === attendanceSchedule ? existingProfile.schedule_effective_from : scheduleEffectiveFrom,
         status
       })
       .eq("id", id);
@@ -467,7 +519,12 @@ export async function updateEmployee(formData: FormData) {
       action: auditAction,
       entity_type: "profiles",
       entity_id: id,
-      details: { role, status }
+      details: {
+        role, status,
+        ...(existingProfile.joining_date !== joiningDate ? { joining_date: { from: existingProfile.joining_date, to: joiningDate } } : {}),
+        ...(existingProfile.system_entry_date !== systemEntryDate ? { system_entry_date: { from: existingProfile.system_entry_date, to: systemEntryDate } } : {}),
+        ...(existingProfile.attendance_schedule !== attendanceSchedule ? { attendance_schedule: { from: existingProfile.attendance_schedule, to: attendanceSchedule, effective_from: scheduleEffectiveFrom } } : {})
+      }
     });
 
     if (auditError) throw new Error(auditError.message);

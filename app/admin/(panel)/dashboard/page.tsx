@@ -15,6 +15,7 @@ import {
 import { LiveClock } from "@/components/layout/live-clock";
 import { StatCard } from "@/components/ui/stat-card";
 import { deriveAttendanceFlags } from "@/lib/attendance";
+import { isNonWorkingDate } from "@/lib/attendance-calendar";
 import { requireAdminProfile } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
@@ -40,7 +41,7 @@ export default async function AdminDashboardPage() {
     reportsToday
   ] = await Promise.all([
     getLocale(),
-    supabase.from("profiles").select("id, role, status"),
+    supabase.from("profiles").select("id, role, status, joining_date, system_entry_date"),
     supabase.from("attendance").select("employee_id, work_date, check_in_at, check_out_at, total_hours, status").eq("work_date", today),
     supabase.from("tasks").select("id", { count: "exact", head: true }).eq("status", "Pending"),
     supabase
@@ -54,6 +55,12 @@ export default async function AdminDashboardPage() {
 
   const staffRecords = employees.data ?? [];
   const activeEmployees = staffRecords.filter((employee) => employee.role === "employee" && employee.status === "active");
+  const attendanceEligibleEmployees = activeEmployees.filter((employee) =>
+    employee.system_entry_date <= today && (!employee.joining_date || employee.joining_date <= today)
+  );
+  const attendanceEligibleIds = new Set(attendanceEligibleEmployees.map((employee) => employee.id));
+  const workingTodayEmployees = attendanceEligibleEmployees.filter((employee) => !isNonWorkingDate(employee.id, today, settings));
+  const workingTodayIds = new Set(workingTodayEmployees.map((employee) => employee.id));
   const activeEmployeeIds = new Set(activeEmployees.map((employee) => employee.id));
 
   const { getApprovedLeaveDates } = await import("@/lib/attendance");
@@ -70,14 +77,16 @@ export default async function AdminDashboardPage() {
   ).length;
   const lateToday = activeAttendanceFlags.filter((flags) => flags.isLate).length;
   const halfDayToday = activeAttendanceFlags.filter((flags) => flags.isHalfDay).length;
-  const reportEmployees = new Set((reportsToday.data ?? []).filter((item) => activeEmployeeIds.has(item.employee_id)).map((item) => item.employee_id));
-  const missingReports = Math.max(activeEmployeeCount - reportEmployees.size, 0);
+  const reportEmployees = new Set((reportsToday.data ?? []).filter((item) => attendanceEligibleIds.has(item.employee_id)).map((item) => item.employee_id));
+  const missingReportEmployees = workingTodayEmployees.filter((employee) => !approvedLeavesMap.get(employee.id)?.has(today));
+  const submittedWorkingReports = new Set((reportsToday.data ?? []).filter((item) => workingTodayIds.has(item.employee_id)).map((item) => item.employee_id));
+  const missingReports = missingReportEmployees.filter((employee) => !submittedWorkingReports.has(employee.id)).length;
   const officeEndedToday = isOfficeHoursEnded(settings);
 
   // Actually absent today (has a record saying Absent, and NOT on leave)
   const actualAbsentToday = activeAttendanceToday.filter((item, i) => {
     const isLeave = approvedLeavesMap.get(item.employee_id)?.has(today);
-    return activeAttendanceFlags[i].isAbsent && !isLeave;
+    return activeAttendanceFlags[i].isAbsent && !isLeave && attendanceEligibleIds.has(item.employee_id) && !isNonWorkingDate(item.employee_id, today, settings);
   }).length;
 
   // Actual leave today (either marked as leave or has approved leave and no present record)
@@ -91,7 +100,7 @@ export default async function AdminDashboardPage() {
   }).length;
 
   const missingAbsentToday = officeEndedToday
-    ? activeEmployees.filter((employee) => !activeAttendanceEmployeeIds.has(employee.id) && !approvedLeavesMap.get(employee.id)?.has(today)).length
+    ? workingTodayEmployees.filter((employee) => !activeAttendanceEmployeeIds.has(employee.id) && !approvedLeavesMap.get(employee.id)?.has(today)).length
     : 0;
 
   const absentToday = actualAbsentToday + missingAbsentToday;

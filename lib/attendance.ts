@@ -3,6 +3,7 @@ import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { officeTimingForDate } from "@/lib/office-timing";
+import { isNonWorkingDate } from "@/lib/attendance-calendar";
 import type { AttendanceRecord, AttendanceStatus, OrganizationSettings, Profile } from "@/lib/types";
 import { formatTime, formatWorkedDuration, getHalfDayThresholdHours, isDutyEndedForDate, isOfficeHoursEnded, getOrgCurrentTimeHHMM, parseTimeToMinutes, todayISOInTimezone } from "@/lib/utils";
 
@@ -324,15 +325,29 @@ export function buildCompleteTimelineWithAbsent(
   employee: Profile,
   startDate: string,
   endDate: string,
-  settings?: Pick<OrganizationSettings, "office_end_time" | "timezone">,
+  settings?: OrganizationSettings,
   approvedLeaves: Set<string> = new Set()
 ): AttendanceRecord[] {
   const recordsByDate = new Map(actualRecords.map((r) => [r.work_date, r]));
   const dates = getDateRange(startDate, endDate);
 
   const timeline: AttendanceRecord[] = [];
+  // The employment date and the date attendance tracking began are independent.
+  // Keep real work recorded before these dates, but exclude unworked days.
+  const attendanceStart = [employee.joining_date, employee.system_entry_date]
+    .filter((date): date is string => Boolean(date))
+    .sort()
+    .at(-1);
   for (const date of dates.reverse()) {
     const existing = recordsByDate.get(date);
+    if (attendanceStart && date < attendanceStart) {
+      if (existing && (existing.check_in_at || existing.check_out_at || Number(existing.total_hours) > 0)) timeline.push(existing);
+      continue;
+    }
+    if (settings && isNonWorkingDate(employee.id, date, settings)) {
+      if (existing && (existing.check_in_at || existing.check_out_at || Number(existing.total_hours) > 0)) timeline.push(existing);
+      continue;
+    }
     const isApprovedLeave = approvedLeaves.has(date);
     const isDutyEnded = settings ? isDutyEndedForDate(date, settings) : true;
 

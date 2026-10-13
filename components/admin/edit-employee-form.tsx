@@ -25,10 +25,21 @@ export function EditEmployeeForm({
       <input type="hidden" name="id" value={employee.id} />
 
       <Input name="full_name" label="Full name" defaultValue={employee.full_name} required />
+      <Input name="father_name" label="Father's name" defaultValue={employee.father_name ?? ""} maxLength={200} />
       <Input name="phone" label="Phone" defaultValue={employee.phone ?? ""} />
 
       <Select name="employee_type" label="Employee Type" options={["", ...EMPLOYEE_TYPES]} defaultValue={employee.employee_type ?? ""} />
       <Input name="joining_date" label="Joining date" type="date" defaultValue={employee.joining_date ?? ""} />
+      <Input name="system_entry_date" label="System entry date (attendance starts)" type="date" defaultValue={employee.system_entry_date} required />
+      <label className="grid gap-1 text-sm font-bold text-slate-700">
+        Weekly / rotation off days
+        <select name="attendance_schedule" defaultValue={employee.attendance_schedule} className="min-h-11 rounded-lg border border-slate-300 px-3">
+          <option value="unspecified">Not set — select a plan</option>
+          <option value="weekly_friday">Friday off every week</option>
+          <option value="monthly_four">Four days after one month (request dates)</option>
+          <option value="bimonthly_eight">Eight days after two months (request dates)</option>
+        </select>
+      </label>
 
       <Select name="role" label="Role" options={roles} defaultValue={employee.role} />
       <Select name="status" label="Status" options={statuses} defaultValue={employee.status} />

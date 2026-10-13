@@ -58,10 +58,14 @@ async function deleteSafeLegacyLeavePlaceholders(
 export async function applyLeave(formData: FormData) {
   const profile = await requireProfile();
   const supabase = await createClient();
+  const leaveType = String(formData.get("leave_type") || "");
+  if (leaveType === "Rotation Off" && !["monthly_four", "bimonthly_eight"].includes(profile.attendance_schedule)) {
+    throw new Error("Rotation off requests require a monthly or two-month plan.");
+  }
 
   const { error } = await supabase.from("leave_requests").insert({
     employee_id: profile.id,
-    leave_type: String(formData.get("leave_type") || ""),
+    leave_type: leaveType,
     from_date: String(formData.get("from_date") || ""),
     to_date: String(formData.get("to_date") || ""),
     reason: String(formData.get("reason") || "").trim(),

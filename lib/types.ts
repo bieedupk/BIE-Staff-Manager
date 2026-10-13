@@ -1,5 +1,7 @@
 export type UserRole = "super_admin" | "admin" | "supervisor" | "employee";
 export type EmployeeStatus = "active" | "disabled";
+export type AttendanceSchedule = "unspecified" | "weekly_friday" | "monthly_four" | "bimonthly_eight";
+export type EmployeeSchedulePeriod = { employee_id: string; effective_from: string; attendance_schedule: AttendanceSchedule };
 export type WelcomeEmailMode = "automatic" | "manual";
 export type WelcomeEmailStatus = "pending" | "sending" | "sent" | "failed" | "skipped";
 export type AttendanceStatus = "Present" | "Absent" | "Late" | "Half Day" | "Pending" | "Leave";
@@ -19,6 +21,9 @@ export type OrganizationSettings = {
   created_at: string;
   updated_at: string;
   office_timing_history?: OfficeTimingPeriod[];
+  office_holidays?: string[];
+  office_holiday_details?: { holiday_date: string; name: string }[];
+  employee_schedule_history?: EmployeeSchedulePeriod[];
 };
 
 export type OfficeTimingPeriod = {
@@ -32,6 +37,7 @@ export type OfficeTimingPeriod = {
 export type Profile = {
   id: string;
   full_name: string;
+  father_name: string | null;
   email: string;
   phone: string | null;
   role: UserRole;
@@ -40,6 +46,9 @@ export type Profile = {
   designation: string | null;
   supervisor_id: string | null;
   joining_date: string | null;
+  system_entry_date: string;
+  attendance_schedule: AttendanceSchedule;
+  schedule_effective_from: string;
   status: EmployeeStatus;
   welcome_email_mode: WelcomeEmailMode;
   welcome_email_status: WelcomeEmailStatus;
@@ -149,7 +158,8 @@ export type LeaveRequest = {
   reviewed_by: string | null;
   reviewed_at: string | null;
   created_at: string;
-  employee_profile?: Pick<Profile, "id" | "full_name" | "department" | "department_id" | "designation"> | null;
+  employee_profile?: (Pick<Profile, "id" | "full_name" | "department" | "department_id" | "designation"> &
+    Partial<Pick<Profile, "attendance_schedule">>) | null;
 };
 
 export type Task = {

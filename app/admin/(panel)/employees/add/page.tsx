@@ -7,10 +7,11 @@ import { requireAdminProfile } from "@/lib/auth";
 import { ensureDefaultDepartments } from "@/lib/default-departments";
 import { departmentDisplayName } from "@/lib/department-utils";
 import { EMPLOYEE_TYPES } from "@/lib/employee-options";
+import { getOrganizationSettings } from "@/lib/organization-settings";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import type { Department, Profile } from "@/lib/types";
-import { isAdminManagerRole, roleLabel } from "@/lib/utils";
+import { isAdminManagerRole, roleLabel, todayISOInTimezone } from "@/lib/utils";
 
 const roles = ["employee", "supervisor", "admin", "super_admin"];
 const statuses = ["active", "disabled"];
@@ -24,6 +25,7 @@ export default async function AddEmployeePage({
   }>;
 }) {
   const currentProfile = await requireAdminProfile();
+  const today = todayISOInTimezone((await getOrganizationSettings()).timezone);
   const canManageEmployees = isAdminManagerRole(currentProfile.role);
 
   if (canManageEmployees) {
@@ -81,6 +83,7 @@ export default async function AddEmployeePage({
               <p className="mt-0.5 text-xs font-medium text-slate-500">Essential login credentials and direct contact information.</p>
               <div className="mt-3 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                 <Input name="full_name" label="Full name" placeholder="e.g. Muhammad Ali" required />
+                <Input name="father_name" label="Father's name" placeholder="e.g. Muhammad Akram" maxLength={200} />
                 <Input name="email" label="Email address" type="email" placeholder="name@bie.edu.pk" required />
                 <Input name="password" label="Temporary password" type="password" required minLength={6} placeholder="Min 6 characters" />
                 <Input name="phone" label="Phone number" placeholder="+92 300 1234567" />
@@ -95,6 +98,16 @@ export default async function AddEmployeePage({
                 <Select name="role" label="System Role" options={roles} defaultValue="employee" />
                 <Select name="status" label="Account Status" options={statuses} defaultValue="active" />
                 <Input name="joining_date" label="Joining date" type="date" />
+                <Input name="system_entry_date" label="System entry date (attendance starts)" type="date" defaultValue={today} required />
+                <label className="grid gap-1 text-sm font-bold text-slate-700">
+                  Weekly / rotation off days
+                  <select name="attendance_schedule" required defaultValue="" className="min-h-11 rounded-lg border border-slate-300 px-3 bg-white">
+                    <option value="" disabled>Select a plan</option>
+                    <option value="weekly_friday">Friday off every week</option>
+                    <option value="monthly_four">Four days after one month (request dates)</option>
+                    <option value="bimonthly_eight">Eight days after two months (request dates)</option>
+                  </select>
+                </label>
                 <label className="grid gap-1 text-sm font-bold text-slate-700">
                   Supervisor
                   <select name="supervisor_id" className="min-h-11 rounded-lg border border-slate-300 px-3 bg-white">
