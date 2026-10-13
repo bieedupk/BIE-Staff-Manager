@@ -64,7 +64,10 @@ export default async function AdminDashboardPage() {
   const activeAttendanceFlags = activeAttendanceToday.map((item) => deriveAttendanceFlags(item, settings));
   const activeEmployeeCount = activeEmployees.length;
 
-  const presentToday = activeAttendanceFlags.filter((flags) => flags.isPresent).length;
+  // A check-in means the employee is here, even while checkout is pending.
+  const presentToday = activeAttendanceFlags.filter((flags, index) =>
+    flags.isPresent || (flags.isPending && Boolean(activeAttendanceToday[index].check_in_at))
+  ).length;
   const lateToday = activeAttendanceFlags.filter((flags) => flags.isLate).length;
   const halfDayToday = activeAttendanceFlags.filter((flags) => flags.isHalfDay).length;
   const reportEmployees = new Set((reportsToday.data ?? []).filter((item) => activeEmployeeIds.has(item.employee_id)).map((item) => item.employee_id));
