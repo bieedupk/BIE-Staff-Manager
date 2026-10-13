@@ -173,10 +173,10 @@ export function getHalfDayThresholdHours(
   }
   const startMins = parseTimeToMinutes(settings.office_start_time);
   const endMins = parseTimeToMinutes(settings.office_end_time);
-  if (startMins === null || endMins === null || endMins <= startMins) {
+  if (startMins === null || endMins === null) {
     return 4.0;
   }
-  const dutyDurationHours = (endMins - startMins) / 60;
+  const dutyDurationHours = ((endMins - startMins + 24 * 60) % (24 * 60) || 24 * 60) / 60;
   return dutyDurationHours / 2;
 }
 

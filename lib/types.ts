@@ -18,6 +18,15 @@ export type OrganizationSettings = {
   late_threshold_time: string;
   created_at: string;
   updated_at: string;
+  office_timing_history?: OfficeTimingPeriod[];
+};
+
+export type OfficeTimingPeriod = {
+  effective_from: string;
+  timezone: string;
+  office_start_time: string;
+  office_end_time: string;
+  late_threshold_time: string;
 };
 
 export type Profile = {

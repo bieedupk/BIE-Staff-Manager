@@ -56,7 +56,12 @@ export default async function AdminSettingsPage({
       <section className="mt-5 rounded-lg border border-emerald-100 bg-white p-4 shadow-soft">
         <h2 className="font-extrabold text-slate-950">Office Timing</h2>
         <p className="mt-1 text-sm font-medium text-slate-500">
-          These settings power admin timing display. Attendance check-in and check-out continue to use server time.
+          Changes take effect for the current work date. Earlier attendance keeps the schedule that applied on its date.
+        </p>
+        <p className="mt-2 text-sm text-slate-600">
+          Timing history: {settings.office_timing_history?.map((period) =>
+            `${period.effective_from === "0001-01-01" ? "Before Oct 12, 2026" : `From ${period.effective_from}`}: ${period.office_start_time.slice(0, 5)}–${period.office_end_time.slice(0, 5)} (late after ${period.late_threshold_time.slice(0, 5)})`
+          ).join("; ")}
         </p>
         {canUpdateOfficeTiming ? (
           <form action={updateOfficeTimingSettings} className="mt-4 grid gap-3 md:grid-cols-2">

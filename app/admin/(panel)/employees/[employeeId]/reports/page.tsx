@@ -9,6 +9,7 @@ import { requireAdminProfile } from "@/lib/auth";
 import { getAvatarSignedUrl } from "@/lib/avatar";
 import { getEmployeeDepartmentNames } from "@/lib/employee-departments";
 import { getOrganizationSettings } from "@/lib/organization-settings";
+import { officeTimingForDate } from "@/lib/office-timing";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Profile, AttendanceRecord } from "@/lib/types";
 import { formatDate, formatDurationMinutes, roleLabel, todayISOInTimezone, parseTimeToMinutes, formatTime } from "@/lib/utils";
@@ -155,8 +156,9 @@ export default async function AdminEmployeeReportsPage({
     : 0;
 
   // Graph Data
-  const scheduledMins = Math.max(0, (parseTimeToMinutes(orgSettings.office_end_time) ?? 0) - (parseTimeToMinutes(orgSettings.office_start_time) ?? 0));
-  const scheduledStartMins = parseTimeToMinutes(orgSettings.office_start_time) ?? undefined;
+  const scheduledMins = currentReport.daily.length
+    ? Math.round(currentReport.daily.reduce((sum, row) => sum + row.scheduledMinutes, 0) / currentReport.daily.length)
+    : 0;
   
   let workingHoursData: any[] = [];
   let checkInTrendData: any[] = [];
@@ -170,7 +172,7 @@ export default async function AdminEmployeeReportsPage({
       .map(r => ({
         label: r.date.substring(5), // MM-DD
         value: r.workedMinutes,
-        reference: scheduledMins > 0 ? scheduledMins : undefined
+        reference: r.scheduledMinutes > 0 ? r.scheduledMinutes : undefined
       }));
 
     checkInTrendData = currentReport.daily
@@ -179,14 +181,14 @@ export default async function AdminEmployeeReportsPage({
       .map(r => {
         let val = null;
         if (r.checkIn) {
-          const timeStr = formatTime(r.checkIn, timezone);
+          const timeStr = formatTime(r.checkIn, officeTimingForDate(orgSettings, r.date).timezone);
           val = parseTimeToMinutes(timeStr);
         }
         return {
           label: r.date.substring(5),
           value: val,
-          reference: scheduledStartMins,
-          timezone: timezone,
+          reference: r.scheduledStartMinutes,
+          timezone: officeTimingForDate(orgSettings, r.date).timezone,
           rawTime: r.checkIn
         };
       });
@@ -229,7 +231,9 @@ export default async function AdminEmployeeReportsPage({
       workingHoursData.push({
         label: label,
         value: mAvgMins,
-        reference: scheduledMins > 0 ? scheduledMins : undefined
+        reference: mReport.daily.length
+          ? Math.round(mReport.daily.reduce((sum, row) => sum + row.scheduledMinutes, 0) / mReport.daily.length)
+          : undefined
       });
       
       yearlyMonthsData.push({

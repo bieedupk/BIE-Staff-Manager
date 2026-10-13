@@ -1,12 +1,16 @@
 import { deriveAttendanceFlags } from "@/lib/attendance";
+import { officeTimingForDate } from "@/lib/office-timing";
 import type { AttendanceRecord, OrganizationSettings } from "@/lib/types";
 import { parseTimeToMinutes, todayISOInTimezone } from "@/lib/utils";
 
 export type DailyAttendanceRow = {
   date: string;
+  timezone: string;
   checkIn: string | null;
   checkOut: string | null;
   workedMinutes: number;
+  scheduledMinutes: number;
+  scheduledStartMinutes: number;
   overtimeMinutes: number;
   isPresent: boolean;
   isAbsent: boolean;
@@ -56,12 +60,13 @@ export function buildAttendanceReport(
 ): AttendanceReport {
   const daily: DailyAttendanceRow[] = records.map((record) => {
     const flags = deriveAttendanceFlags(record, settings);
+    const workSettings = officeTimingForDate(settings, record.work_date);
 
     const workedMinutes = record.total_hours ? Math.round(Number(record.total_hours) * 60) : 0;
 
     let overtimeMinutes = 0;
-    const startMins = parseTimeToMinutes(settings.office_start_time) ?? 0;
-    const endMins = parseTimeToMinutes(settings.office_end_time) ?? 0;
+    const startMins = parseTimeToMinutes(workSettings.office_start_time) ?? 0;
+    const endMins = parseTimeToMinutes(workSettings.office_end_time) ?? 0;
 
     let scheduledDurationMinutes = endMins - startMins;
     if (scheduledDurationMinutes < 0) {
@@ -76,9 +81,12 @@ export function buildAttendanceReport(
 
     return {
       date: record.work_date,
+      timezone: workSettings.timezone,
       checkIn: record.check_in_at,
       checkOut: record.check_out_at,
       workedMinutes,
+      scheduledMinutes: scheduledDurationMinutes,
+      scheduledStartMinutes: startMins,
       overtimeMinutes,
       isPresent: flags.isPresent,
       isAbsent: flags.isAbsent,

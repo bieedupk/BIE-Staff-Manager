@@ -2,13 +2,14 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { formatDurationMinutes, getOrgCurrentTimeHHMM } from "@/lib/utils";
+import { officeTimingPeriodForDate } from "@/lib/office-timing";
+import type { OfficeTimingPeriod } from "@/lib/types";
 
 type Props = {
   initialCheckInTime: string;
   initialCheckOutTime: string;
   initialStatus: string;
-  /** "HH:MM" — the organization-configured duty start time (e.g. "09:00") */
-  dutyStartTime: string;
+  officeTimingHistory: OfficeTimingPeriod[];
   /** "YYYY-MM-DD" — organization-local today date */
   todayDate: string;
   /** IANA timezone string for the organization (e.g. "Asia/Karachi") */
@@ -25,7 +26,7 @@ export function AttendanceCorrectionHours({
   initialCheckInTime,
   initialCheckOutTime,
   initialStatus,
-  dutyStartTime,
+  officeTimingHistory,
   todayDate,
   timezone,
   serverNow,
@@ -87,8 +88,7 @@ export function AttendanceCorrectionHours({
   const isToday = correctionDate === todayDate;
   const isTimeFieldsDisabled = outcome !== "Worked";
 
-  // Check-in rule (same for today and historical): checkInTime >= dutyStartTime
-  const checkInMin = dutyStartTime || undefined;
+  const checkInMin = officeTimingPeriodForDate(officeTimingHistory, correctionDate).office_start_time.slice(0, 5);
 
   // Check-out: if today → max = current org time; for past dates → no current-time max
   const checkOutMax = isToday && currentOrgTime ? currentOrgTime : undefined;

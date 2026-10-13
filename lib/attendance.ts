@@ -2,6 +2,7 @@ import "server-only";
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { officeTimingForDate } from "@/lib/office-timing";
 import type { AttendanceRecord, AttendanceStatus, OrganizationSettings, Profile } from "@/lib/types";
 import { formatTime, formatWorkedDuration, getHalfDayThresholdHours, isDutyEndedForDate, isOfficeHoursEnded, getOrgCurrentTimeHHMM, parseTimeToMinutes, todayISOInTimezone } from "@/lib/utils";
 
@@ -429,6 +430,7 @@ export function deriveAttendanceFlags(
     | undefined,
   settings: Pick<OrganizationSettings, "timezone" | "late_threshold_time" | "office_start_time" | "office_end_time">
 ): AttendanceFlags {
+  const workSettings = attendance?.work_date ? officeTimingForDate(settings, attendance.work_date) : settings;
   if (attendance?.status === "Leave") {
     const hasWorked = attendance.check_in_at !== null || attendance.check_out_at !== null || (attendance.total_hours !== null && Number(attendance.total_hours) > 0);
     if (!hasWorked) {
@@ -457,7 +459,7 @@ export function deriveAttendanceFlags(
   }
 
   if (!attendance?.check_in_at) {
-    const isPending = Boolean(attendance?.work_date && !isDutyEndedForDate(attendance.work_date, settings));
+    const isPending = Boolean(attendance?.work_date && !isDutyEndedForDate(attendance.work_date, workSettings));
     if (isPending || attendance?.status === "Pending") {
       return {
         isPresent: false,
@@ -493,9 +495,9 @@ export function deriveAttendanceFlags(
     };
   }
 
-  const lateThreshold = parseTimeToMinutes(settings.late_threshold_time) ?? 0;
-  const isLate = timeInZoneMinutes(attendance.check_in_at, settings.timezone) > lateThreshold;
-  const halfDayThreshold = getHalfDayThresholdHours(settings);
+  const lateThreshold = parseTimeToMinutes(workSettings.late_threshold_time) ?? 0;
+  const isLate = timeInZoneMinutes(attendance.check_in_at, workSettings.timezone) > lateThreshold;
+  const halfDayThreshold = getHalfDayThresholdHours(workSettings);
   const isHalfDay =
     attendance.total_hours !== null &&
     Number(attendance.total_hours) <= halfDayThreshold;
