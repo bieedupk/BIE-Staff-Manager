@@ -150,7 +150,7 @@ export default async function AdminAttendancePage({ searchParams }: Props) {
   const filteredAttendance =
     statusFilter === "all"
       ? selectedAttendance
-      : selectedAttendance.filter((record) => attendanceMatchesFilter(attendanceFlagsByRecordId.get(record.id), statusFilter));
+      : selectedAttendance.filter((record) => attendanceMatchesFilter(record, attendanceFlagsByRecordId.get(record.id), statusFilter, today));
 
   return (
     <>
@@ -235,7 +235,9 @@ export default async function AdminAttendancePage({ searchParams }: Props) {
                       </p>
                     </div>
                     <div className="flex flex-wrap justify-end gap-2">
-                      {(attendanceFlagsByRecordId.get(record.id)?.displayStatuses ?? [record.status]).map((status) => (
+                      {(record.work_date === today && record.check_in_at && attendanceFlagsByRecordId.get(record.id)?.isPending
+                        ? ["Checked In"]
+                        : (attendanceFlagsByRecordId.get(record.id)?.displayStatuses ?? [record.status])).map((status) => (
                         <StatusBadge key={status} tone="attendance">
                           {status}
                         </StatusBadge>
@@ -333,9 +335,14 @@ function normalizeAttendanceFilter(status?: string): AttendanceFilter {
   return "all";
 }
 
-function attendanceMatchesFilter(flags: ReturnType<typeof deriveAttendanceFlags> | undefined, status: AttendanceFilter) {
+function attendanceMatchesFilter(
+  record: AttendanceRecord,
+  flags: ReturnType<typeof deriveAttendanceFlags> | undefined,
+  status: AttendanceFilter,
+  today: string
+) {
   if (!flags) return false;
-  if (status === "present") return flags.isPresent;
+  if (status === "present") return flags.isPresent || (flags.isPending && Boolean(record.check_in_at) && record.work_date === today);
   if (status === "late") return flags.isLate;
   if (status === "half-day") return flags.isHalfDay;
   if (status === "absent") return flags.isAbsent;
