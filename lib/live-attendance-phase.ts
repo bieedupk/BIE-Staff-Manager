@@ -7,7 +7,7 @@ export function liveAttendancePhase(settings: OrganizationSettings, workDate: st
   const timing = officeTimingForDate(settings, workDate);
   const current = getOrgCurrentTimeMinutes(timing.timezone, now);
   const start = parseTimeToMinutes(timing.office_start_time);
-  const late = parseTimeToMinutes(timing.late_threshold_time);
-  if (start === null || late === null || current < start) return "before_start" as const;
-  return current < late ? "pending" as const : "absent" as const;
+  const end = parseTimeToMinutes(timing.office_end_time);
+  if (start === null || end === null || current < start) return "before_start" as const;
+  return current < end ? "pending" as const : "absent" as const;
 }
