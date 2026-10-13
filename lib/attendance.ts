@@ -484,14 +484,16 @@ export function deriveAttendanceFlags(
   }
 
   if (!attendance.check_out_at) {
+    const lateThreshold = parseTimeToMinutes(workSettings.late_threshold_time) ?? 0;
+    const isLate = timeInZoneMinutes(attendance.check_in_at, workSettings.timezone) > lateThreshold;
     return {
       isPresent: false,
-      isLate: false,
+      isLate,
       isHalfDay: false,
       isAbsent: false,
       isPending: true,
       isLeave: false,
-      displayStatuses: ["Pending"]
+      displayStatuses: isLate ? ["Pending", "Late"] : ["Pending"]
     };
   }
 
