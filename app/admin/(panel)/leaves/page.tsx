@@ -194,14 +194,49 @@ function RotationEligibilityNotice({ leave, lastApproved, today }: {
   const earlyDates = leave.from_date < eligibleOn;
   const exceedsPlan = requestedDays > plan.days;
 
+  const needsAttention = earlyRequest || earlyDates || exceedsPlan;
+
   return (
-    <div className={`mt-2 rounded-lg border p-3 text-xs font-medium ${earlyRequest || earlyDates || exceedsPlan ? "border-amber-300 bg-amber-50 text-amber-950" : "border-emerald-200 bg-emerald-50 text-emerald-950"}`}>
-      <p className="font-extrabold">Rotation plan: {plan.label} · Requested: {requestedDays} day(s) · Plan allowance: {plan.days} day(s)</p>
-      <p className="mt-1">{previous ? `Last approved rotation ended ${formatDate(previous.to_date)}` : `Rotation count starts ${formatDate(planStart)}`} · {elapsed} day(s) elapsed · Next eligible: {formatDate(eligibleOn)}</p>
-      {earlyRequest ? <p className="mt-1 font-bold">Eligibility date is {remaining} day(s) away.</p> : <p className="mt-1 font-bold">Eligibility date reached.</p>}
-      {earlyDates ? <p className="mt-1 font-bold">Requested dates begin before the usual eligibility date.</p> : null}
-      {exceedsPlan ? <p className="mt-1 font-bold">Requested block exceeds the usual {plan.days}-day allowance.</p> : null}
-      <p className="mt-1">This is guidance for the reviewer; approval remains at the admin&apos;s discretion.</p>
+    <div className={`mt-3 rounded-xl border p-4 sm:p-5 ${needsAttention ? "border-amber-300 bg-amber-50" : "border-emerald-200 bg-emerald-50"}`}>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h3 className="text-lg font-extrabold text-slate-950">Rotation leave review</h3>
+          <p className="mt-1 text-sm leading-relaxed text-slate-700">These dates help you review the request.</p>
+        </div>
+        <span className={`rounded-full px-3 py-1.5 text-sm font-bold ${needsAttention ? "bg-amber-200 text-amber-950" : "bg-emerald-200 text-emerald-950"}`}>
+          {earlyRequest ? "Not yet eligible" : needsAttention ? "Review request" : "Usual criteria met"}
+        </span>
+      </div>
+
+      <dl className="mt-4 grid gap-3 sm:grid-cols-2">
+        <RotationDetail label="Employee plan" value={plan.label} />
+        <RotationDetail label="Requested leave" value={`${requestedDays} day(s)`} />
+        <RotationDetail label="Usual allowance" value={`${plan.days} day(s)`} />
+        <RotationDetail label={previous ? "Last rotation leave ended" : "Rotation count started"} value={formatDate(anchor)} />
+        <RotationDetail label="Time since that date" value={`${elapsed} day(s)`} />
+        <RotationDetail label="Next usual eligibility" value={formatDate(eligibleOn)} />
+      </dl>
+
+      {needsAttention ? (
+        <div className="mt-4 rounded-lg border border-amber-200 bg-white p-3 text-sm leading-relaxed text-amber-950">
+          <p className="font-extrabold">Points to review</p>
+          {earlyRequest ? <p className="mt-2">The usual eligibility date is {remaining} day(s) away.</p> : null}
+          {earlyDates ? <p className="mt-2">Requested leave begins before the usual eligibility date.</p> : null}
+          {exceedsPlan ? <p className="mt-2">This request exceeds the usual {plan.days}-day allowance.</p> : null}
+        </div>
+      ) : null}
+      <p className="mt-4 border-t border-slate-200 pt-3 text-sm leading-relaxed text-slate-700">
+        This is guidance only. The admin can still approve the request.
+      </p>
+    </div>
+  );
+}
+
+function RotationDetail({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white px-3 py-2.5">
+      <dt className="text-sm font-semibold text-slate-600">{label}</dt>
+      <dd className="mt-1 text-lg font-extrabold leading-snug text-slate-950">{value}</dd>
     </div>
   );
 }
