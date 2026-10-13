@@ -104,6 +104,7 @@ export default async function AddEmployeePage({
                   <select name="attendance_schedule" required defaultValue="" className="min-h-11 rounded-lg border border-slate-300 px-3 bg-white">
                     <option value="" disabled>Select a plan</option>
                     <option value="weekly_friday">Friday off every week</option>
+                    <option value="fortnight_two">Two days after 15 days (request dates)</option>
                     <option value="monthly_four">Four days after one month (request dates)</option>
                     <option value="bimonthly_eight">Eight days after two months (request dates)</option>
                   </select>

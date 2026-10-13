@@ -53,7 +53,7 @@ export default async function EmployeeProfilePage() {
                 <ProfileItem label="Phone" value={profile.phone || "-"} />
                 <ProfileItem label="Joining date" value={formatDate(profile.joining_date)} />
                 <ProfileItem label="System entry date" value={formatDate(profile.system_entry_date)} />
-                <ProfileItem label="Off-day plan" value={{ weekly_friday: "Friday off every week", monthly_four: "Four days after one month (request dates)", bimonthly_eight: "Eight days after two months (request dates)", unspecified: "Not set" }[profile.attendance_schedule]} />
+                <ProfileItem label="Off-day plan" value={{ weekly_friday: "Friday off every week", fortnight_two: "Two days after 15 days (request dates)", monthly_four: "Four days after one month (request dates)", bimonthly_eight: "Eight days after two months (request dates)", unspecified: "Not set" }[profile.attendance_schedule]} />
               </dl>
             </div>
 

@@ -1,6 +1,6 @@
 export type UserRole = "super_admin" | "admin" | "supervisor" | "employee";
 export type EmployeeStatus = "active" | "disabled";
-export type AttendanceSchedule = "unspecified" | "weekly_friday" | "monthly_four" | "bimonthly_eight";
+export type AttendanceSchedule = "unspecified" | "weekly_friday" | "fortnight_two" | "monthly_four" | "bimonthly_eight";
 export type EmployeeSchedulePeriod = { employee_id: string; effective_from: string; attendance_schedule: AttendanceSchedule };
 export type WelcomeEmailMode = "automatic" | "manual";
 export type WelcomeEmailStatus = "pending" | "sending" | "sent" | "failed" | "skipped";
@@ -159,7 +159,7 @@ export type LeaveRequest = {
   reviewed_at: string | null;
   created_at: string;
   employee_profile?: (Pick<Profile, "id" | "full_name" | "department" | "department_id" | "designation"> &
-    Partial<Pick<Profile, "attendance_schedule">>) | null;
+    Partial<Pick<Profile, "attendance_schedule" | "system_entry_date" | "schedule_effective_from">>) | null;
 };
 
 export type Task = {

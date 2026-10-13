@@ -5,7 +5,9 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { SubmitButton } from "@/components/ui/submit-button";
-import { deriveAttendanceFlags, formatDurationFromHours, getRecentAttendanceForAll, buildCompleteTimelineWithAbsent, getApprovedLeaveDates } from "@/lib/attendance";
+import { deriveAttendanceFlags, formatDurationFromHours, getRecentAttendanceForAll, buildCompleteTimelineWithAbsent, getApprovedLeaveDates, createSyntheticFinalRecord } from "@/lib/attendance";
+import { isNonWorkingDate } from "@/lib/attendance-calendar";
+import { liveAttendancePhase } from "@/lib/live-attendance-phase";
 import { requireAdminProfile } from "@/lib/auth";
 import { departmentTextForProfile, fetchEmployeeDepartmentsByEmployee } from "@/lib/employee-departments";
 import { getOrganizationSettings } from "@/lib/organization-settings";
@@ -28,6 +30,7 @@ type Props = {
 const attendanceFilters = [
   { label: "All", value: "all" },
   { label: "Present", value: "present" },
+  { label: "Pending", value: "pending" },
   { label: "Late", value: "late" },
   { label: "Half-Day", value: "half-day" },
   { label: "Absent", value: "absent" },
@@ -112,12 +115,24 @@ export default async function AdminAttendancePage({ searchParams }: Props) {
   }
 
   const allRecords: AttendanceRecord[] = [];
+  const todayPhase = liveAttendancePhase(settings, today);
   for (const employee of employees) {
     if (employeeFilter && employee.id !== employeeFilter) continue;
     const employeeRecords = recordsByEmployee.get(employee.id) ?? [];
     const approvedLeaves = approvedLeavesByEmployee.get(employee.id) || new Set();
     const timeline = buildCompleteTimelineWithAbsent(employeeRecords, employee, fetchStartDate, fetchEndDate, settings, approvedLeaves);
-    allRecords.push(...timeline);
+    const visibleTimeline = timeline.filter((record) => !(record.work_date === today && !record.check_in_at && !record.check_out_at && !record.correction_count && (record.status === "Absent" || record.status === "Pending")));
+    allRecords.push(...visibleTimeline);
+    if (fetchStartDate <= today && fetchEndDate >= today && approvedLeaves.has(today) &&
+      !visibleTimeline.some((record) => record.work_date === today)) {
+      allRecords.push(createSyntheticFinalRecord(employee.id, today, employee, "Leave"));
+    }
+    if (fetchStartDate <= today && fetchEndDate >= today && todayPhase !== "before_start" && todayPhase !== "outside_today" &&
+      employee.system_entry_date <= today && (!employee.joining_date || employee.joining_date <= today) &&
+      !isNonWorkingDate(employee.id, today, settings) && !approvedLeaves.has(today) &&
+      !visibleTimeline.some((record) => record.work_date === today)) {
+      allRecords.push(createSyntheticFinalRecord(employee.id, today, employee, todayPhase === "pending" ? "Pending" : "Absent"));
+    }
   }
 
   allRecords.sort((a, b) => {
@@ -262,7 +277,7 @@ export default async function AdminAttendancePage({ searchParams }: Props) {
                       <p>{formatWorkedDuration(record.total_hours)}</p>
                     </div>
                   </dl>
-                   {canCorrectAttendance && !isApprovedLeave ? (
+                   {canCorrectAttendance && !isApprovedLeave && !(isSyntheticFinalRecord(record) && record.work_date === today && !isDutyEndedForDate(today, settings)) ? (
                     (record.correction_count || 0) >= 2 ? (
                       <div className="mt-3 border-t border-slate-100 pt-3 text-sm font-semibold text-slate-500">
                         Correction limit reached
@@ -331,7 +346,7 @@ export default async function AdminAttendancePage({ searchParams }: Props) {
 function normalizeAttendanceFilter(status?: string): AttendanceFilter {
   const normalized = String(status || "all").toLowerCase().replace(/\s+/g, "-");
   if (normalized === "half-day" || normalized === "halfday") return "half-day";
-  if (normalized === "present" || normalized === "late" || normalized === "absent" || normalized === "leave" || normalized === "all") return normalized as AttendanceFilter;
+  if (normalized === "present" || normalized === "pending" || normalized === "late" || normalized === "absent" || normalized === "leave" || normalized === "all") return normalized as AttendanceFilter;
   return "all";
 }
 
@@ -343,6 +358,7 @@ function attendanceMatchesFilter(
 ) {
   if (!flags) return false;
   if (status === "present") return flags.isPresent || (flags.isPending && Boolean(record.check_in_at) && record.work_date === today);
+  if (status === "pending") return record.work_date === today && flags.isPending && !record.check_in_at;
   if (status === "late") return flags.isLate;
   if (status === "half-day") return flags.isHalfDay;
   if (status === "absent") return flags.isAbsent;

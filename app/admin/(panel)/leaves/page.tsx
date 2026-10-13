@@ -1,11 +1,15 @@
 import { reviewLeave, updateLeaveDates, endLeaveNow } from "@/app/actions/leaves";
 import { EmptyState } from "@/components/ui/empty-state";
+import { LeaveTypeSummary } from "@/components/leave-type-summary";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { createClient } from "@/lib/supabase/server";
-import type { LeaveRequest } from "@/lib/types";
-import { formatDate } from "@/lib/utils";
+import { getOrganizationSettings } from "@/lib/organization-settings";
+import { getApprovedLeaveYearSummary } from "@/lib/leave-year-summary";
+import { daysBetweenISO, rotationEligibilityDate, rotationPlan } from "@/lib/rotation-policy";
+import type { AttendanceSchedule, LeaveRequest } from "@/lib/types";
+import { formatDate, todayISOInTimezone } from "@/lib/utils";
 
 type EmployeeProfileSummary = {
   id: string;
@@ -13,7 +17,9 @@ type EmployeeProfileSummary = {
   designation: string | null;
   department: string | null;
   department_id: string | null;
-  attendance_schedule: string;
+  attendance_schedule: AttendanceSchedule;
+  system_entry_date: string;
+  schedule_effective_from: string;
 };
 
 type RawLeaveRequest = Omit<LeaveRequest, "employee_profile"> & {
@@ -22,9 +28,12 @@ type RawLeaveRequest = Omit<LeaveRequest, "employee_profile"> & {
 
 export default async function AdminLeavesPage() {
   const supabase = await createClient();
+  const settings = await getOrganizationSettings();
+  const today = todayISOInTimezone(settings.timezone);
+  const year = Number(today.slice(0, 4));
   const { data, error } = await supabase
     .from("leave_requests")
-    .select("*, employee_profile:profiles!leave_requests_employee_id_fkey(id, full_name, designation, department, department_id, attendance_schedule)")
+    .select("*, employee_profile:profiles!leave_requests_employee_id_fkey(id, full_name, designation, department, department_id, attendance_schedule, system_entry_date, schedule_effective_from)")
     .order("created_at", { ascending: false });
 
   if (error) {
@@ -53,9 +62,28 @@ export default async function AdminLeavesPage() {
     } as LeaveRequest;
   });
 
+  const leaveSummaryByEmployee = await getApprovedLeaveYearSummary(year, today);
+  const employeesWithRequests = new Map<string, string>(leaves.filter((leave) => leave.employee_profile).map((leave): [string, string] => [leave.employee_id, leave.employee_profile!.full_name]));
+  const approvedRotation = new Map<string, LeaveRequest>();
+  for (const leave of leaves) {
+    if (leave.leave_type !== "Rotation Off" || leave.status !== "Approved") continue;
+    const previous = approvedRotation.get(leave.employee_id);
+    if (!previous || leave.to_date > previous.to_date) approvedRotation.set(leave.employee_id, leave);
+  }
+
   return (
     <>
       <PageHeader title="Leave Requests" subtitle="Approve or reject leave requests and add an office comment." backHref="/admin/dashboard" />
+      {employeesWithRequests.size ? (
+        <section className="mb-5 grid gap-3">
+          {[...employeesWithRequests].sort((a, b) => a[1].localeCompare(b[1])).map(([employeeId, name]) => (
+            <article key={employeeId} className="rounded-lg border border-emerald-100 bg-white p-4 shadow-soft">
+              <h2 className="mb-2 font-extrabold text-slate-950">{name}</h2>
+              <LeaveTypeSummary year={year} counts={leaveSummaryByEmployee.get(employeeId) ?? []} />
+            </article>
+          ))}
+        </section>
+      ) : null}
       <section className="grid gap-4">
         {leaves.length ? (
           leaves.map((leave) => (
@@ -73,8 +101,8 @@ export default async function AdminLeavesPage() {
                   <p className="mt-1 text-sm font-medium text-slate-500">
                     {leave.leave_type} · {formatDate(leave.from_date)} to {formatDate(leave.to_date)}
                   </p>
-                  {leave.leave_type === "Rotation Off" ? (
-                    <p className="text-xs font-semibold text-slate-500">Plan: {leave.employee_profile?.attendance_schedule === "monthly_four" ? "4 days / month" : leave.employee_profile?.attendance_schedule === "bimonthly_eight" ? "8 days / two months" : "Check employee plan"}</p>
+                  {leave.leave_type === "Rotation Off" && leave.status === "Pending" ? (
+                    <RotationEligibilityNotice leave={leave} lastApproved={approvedRotation.get(leave.employee_id)} today={today} />
                   ) : null}
                 </div>
                 <StatusBadge tone="leave">{leave.status}</StatusBadge>
@@ -140,5 +168,40 @@ export default async function AdminLeavesPage() {
         )}
       </section>
     </>
+  );
+}
+
+function RotationEligibilityNotice({ leave, lastApproved, today }: {
+  leave: LeaveRequest;
+  lastApproved?: LeaveRequest;
+  today: string;
+}) {
+  const profile = leave.employee_profile;
+  const plan = rotationPlan(profile?.attendance_schedule);
+  if (!profile?.system_entry_date || !profile.schedule_effective_from || !profile.attendance_schedule || !plan) {
+    return <p className="mt-2 text-xs font-semibold text-amber-800">Rotation plan or start date unavailable; review manually.</p>;
+  }
+
+  const planStart = profile.system_entry_date > profile.schedule_effective_from
+    ? profile.system_entry_date : profile.schedule_effective_from;
+  const previous = lastApproved && lastApproved.to_date >= planStart && lastApproved.id !== leave.id ? lastApproved : null;
+  const anchor = previous ? previous.to_date : planStart;
+  const eligibleOn = rotationEligibilityDate(anchor, profile.attendance_schedule)!;
+  const elapsed = Math.max(0, daysBetweenISO(anchor, today));
+  const remaining = Math.max(0, daysBetweenISO(today, eligibleOn));
+  const requestedDays = daysBetweenISO(leave.from_date, leave.to_date) + 1;
+  const earlyRequest = today < eligibleOn;
+  const earlyDates = leave.from_date < eligibleOn;
+  const exceedsPlan = requestedDays > plan.days;
+
+  return (
+    <div className={`mt-2 rounded-lg border p-3 text-xs font-medium ${earlyRequest || earlyDates || exceedsPlan ? "border-amber-300 bg-amber-50 text-amber-950" : "border-emerald-200 bg-emerald-50 text-emerald-950"}`}>
+      <p className="font-extrabold">Rotation plan: {plan.label} · Requested: {requestedDays} day(s) · Plan allowance: {plan.days} day(s)</p>
+      <p className="mt-1">{previous ? `Last approved rotation ended ${formatDate(previous.to_date)}` : `Rotation count starts ${formatDate(planStart)}`} · {elapsed} day(s) elapsed · Next eligible: {formatDate(eligibleOn)}</p>
+      {earlyRequest ? <p className="mt-1 font-bold">Eligibility date is {remaining} day(s) away.</p> : <p className="mt-1 font-bold">Eligibility date reached.</p>}
+      {earlyDates ? <p className="mt-1 font-bold">Requested dates begin before the usual eligibility date.</p> : null}
+      {exceedsPlan ? <p className="mt-1 font-bold">Requested block exceeds the usual {plan.days}-day allowance.</p> : null}
+      <p className="mt-1">This is guidance for the reviewer; approval remains at the admin&apos;s discretion.</p>
+    </div>
   );
 }
