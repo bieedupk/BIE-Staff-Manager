@@ -123,7 +123,9 @@ export default async function AdminEmployeeReportsPage({
     email: employee.email,
     department: employee.department,
     department_id: employee.department_id,
-    designation: employee.designation
+    designation: employee.designation,
+    joining_date: employee.joining_date,
+    system_entry_date: employee.system_entry_date
   };
 
   // Build Current Report

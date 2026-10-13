@@ -25,6 +25,12 @@ export default async function EmployeeLeavePage() {
       <PageHeader title="Leave" subtitle="Apply for leave and see approval status." backHref="/employee/dashboard" />
       <section className="rounded-lg border border-emerald-100 bg-white p-4 shadow-soft">
         <h2 className="font-extrabold text-slate-950">Apply for Leave</h2>
+        {profile.attendance_schedule === "monthly_four" || profile.attendance_schedule === "bimonthly_eight" ? (
+          <p className="mt-2 text-sm text-slate-600">
+            Your rotation plan is {profile.attendance_schedule === "monthly_four" ? "four days after one month" : "eight days after two months"}.
+            Request the exact dates as Rotation Off; approved dates will be excluded from absence totals.
+          </p>
+        ) : null}
         <form action={applyLeave} className="mt-4 grid gap-3 md:grid-cols-2">
           <label className="grid gap-1 text-sm font-bold text-slate-700">
             Leave type
@@ -34,6 +40,9 @@ export default async function EmployeeLeavePage() {
                   {type}
                 </option>
               ))}
+              {profile.attendance_schedule === "monthly_four" || profile.attendance_schedule === "bimonthly_eight" ? (
+                <option value="Rotation Off">Rotation Off</option>
+              ) : null}
             </select>
           </label>
           <Input name="from_date" label="From date" type="date" required />

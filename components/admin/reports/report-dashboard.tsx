@@ -248,6 +248,9 @@ export function ReportDashboard({
       <div key={animationKey} className="contents">
         <div className="mb-2 mt-4 motion-safe:animate-fade-up" style={{ animationDelay: '0ms' }}>
           <h2 className="text-xl font-extrabold text-slate-900">{type === "weekly" ? "Weekly" : type === "monthly" ? "Monthly" : "Yearly"} Attendance Report</h2>
+          {currentReport.totals.eligibleDays === 0 ? (
+            <p className="mt-2 text-sm text-slate-600">No attendance eligible days in this period. The rate does not apply.</p>
+          ) : null}
         </div>
 
         {/* Metric Cards - 9 KPIs */}
@@ -256,7 +259,7 @@ export function ReportDashboard({
             <MetricCard 
               icon={TrendingUp}
               label="Attendance Rate" 
-              value={`${Math.round(currentReport.ratios.attendanceRate)}%`} 
+              value={currentReport.totals.eligibleDays ? `${Math.round(currentReport.ratios.attendanceRate)}%` : "—"}
               comparison={comparison.attendanceRate}
               format="percentage"
               accent="emerald"
@@ -510,7 +513,7 @@ export function ReportDashboard({
                         {formatDurationMinutes(report.totals.totalOvertimeMinutes)}
                       </td>
                       <td className="px-5 py-3 text-slate-900 font-bold">
-                        {Math.round(report.ratios.attendanceRate)}%
+                        {report.totals.eligibleDays ? `${Math.round(report.ratios.attendanceRate)}%` : "—"}
                       </td>
                       <td className="px-5 py-3 text-slate-900 font-bold">
                         {Math.round(report.ratios.punctualityRate)}%

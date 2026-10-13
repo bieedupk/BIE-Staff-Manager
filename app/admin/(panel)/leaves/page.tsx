@@ -13,6 +13,7 @@ type EmployeeProfileSummary = {
   designation: string | null;
   department: string | null;
   department_id: string | null;
+  attendance_schedule: string;
 };
 
 type RawLeaveRequest = Omit<LeaveRequest, "employee_profile"> & {
@@ -23,7 +24,7 @@ export default async function AdminLeavesPage() {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("leave_requests")
-    .select("*, employee_profile:profiles!leave_requests_employee_id_fkey(id, full_name, designation, department, department_id)")
+    .select("*, employee_profile:profiles!leave_requests_employee_id_fkey(id, full_name, designation, department, department_id, attendance_schedule)")
     .order("created_at", { ascending: false });
 
   if (error) {
@@ -72,6 +73,9 @@ export default async function AdminLeavesPage() {
                   <p className="mt-1 text-sm font-medium text-slate-500">
                     {leave.leave_type} · {formatDate(leave.from_date)} to {formatDate(leave.to_date)}
                   </p>
+                  {leave.leave_type === "Rotation Off" ? (
+                    <p className="text-xs font-semibold text-slate-500">Plan: {leave.employee_profile?.attendance_schedule === "monthly_four" ? "4 days / month" : leave.employee_profile?.attendance_schedule === "bimonthly_eight" ? "8 days / two months" : "Check employee plan"}</p>
+                  ) : null}
                 </div>
                 <StatusBadge tone="leave">{leave.status}</StatusBadge>
               </div>

@@ -1,4 +1,5 @@
 import { updateOfficeTimingSettings, updateWelcomeEmailTemplate } from "@/app/actions/settings";
+import { addOfficeHoliday, removeOfficeHoliday } from "@/app/actions/holidays";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
 import { SubmitButton } from "@/components/ui/submit-button";
@@ -17,6 +18,8 @@ export default async function AdminSettingsPage({
     office_settings_error?: string;
     email_template_success?: string;
     email_template_error?: string;
+    holiday_success?: string;
+    holiday_error?: string;
   }>;
 }) {
   const profile = await requireAdminProfile();
@@ -32,6 +35,7 @@ export default async function AdminSettingsPage({
       <PageHeader title="Settings" subtitle="Phase 1 keeps settings simple and focused." backHref="/admin/dashboard" />
       <SettingsMessage success={resolvedSearchParams?.office_settings_success} error={resolvedSearchParams?.office_settings_error} />
       <SettingsMessage success={resolvedSearchParams?.email_template_success} error={resolvedSearchParams?.email_template_error} />
+      <SettingsMessage success={resolvedSearchParams?.holiday_success} error={resolvedSearchParams?.holiday_error} />
       <section className="rounded-lg border border-emerald-100 bg-white p-4 shadow-soft">
         <h2 className="font-extrabold text-slate-950">Account</h2>
         <dl className="mt-4 grid gap-3 text-sm md:grid-cols-2">
@@ -91,6 +95,34 @@ export default async function AdminSettingsPage({
             <SettingValue label="Timezone" value={settings.timezone} />
           </dl>
         )}
+      </section>
+      <section className="mt-5 rounded-lg border border-emerald-100 bg-white p-4 shadow-soft">
+        <h2 className="font-extrabold text-slate-950">Office holidays</h2>
+        <p className="mt-1 text-sm text-slate-600">These dates are excluded from missing attendance for every employee. Existing check-ins remain visible.</p>
+        {canUpdateOfficeTiming ? (
+          <form action={addOfficeHoliday} className="mt-4 flex flex-wrap items-end gap-3">
+            <label className="grid gap-1 text-sm font-bold text-slate-700">Holiday date
+              <input name="holiday_date" type="date" required className="min-h-11 rounded-lg border border-slate-300 px-3" />
+            </label>
+            <label className="grid gap-1 text-sm font-bold text-slate-700">Name
+              <input name="holiday_name" required maxLength={120} className="min-h-11 rounded-lg border border-slate-300 px-3" />
+            </label>
+            <SubmitButton pendingText="Saving..." className="min-h-11 rounded-lg bg-bie-700 px-4 font-bold text-white">Add holiday</SubmitButton>
+          </form>
+        ) : null}
+        <ul className="mt-4 space-y-2">
+          {settings.office_holiday_details?.map((holiday) => (
+            <li key={holiday.holiday_date} className="flex items-center justify-between gap-3 rounded border border-slate-200 px-3 py-2 text-sm">
+              <span>{holiday.holiday_date} · {holiday.name}</span>
+              {canUpdateOfficeTiming ? (
+                <form action={removeOfficeHoliday}>
+                  <input type="hidden" name="holiday_date" value={holiday.holiday_date} />
+                  <SubmitButton pendingText="Removing..." className="rounded border border-red-200 px-3 py-1 font-bold text-red-700">Remove</SubmitButton>
+                </form>
+              ) : null}
+            </li>
+          ))}
+        </ul>
       </section>
       <section className="mt-5 rounded-lg border border-emerald-100 bg-white p-4 shadow-soft">
         <h2 className="font-extrabold text-slate-950">Email Templates</h2>

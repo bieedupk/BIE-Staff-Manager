@@ -132,9 +132,12 @@ export default async function AdminEmployeeProfilePage({
               </h2>
               <dl className="mt-4 grid gap-3.5">
                 <ProfileItem label="Full name" value={employee.full_name} />
+                <ProfileItem label="Father's name" value={employee.father_name || "-"} />
                 <ProfileItem label="Email" value={employee.email} />
                 <ProfileItem label="Phone" value={employee.phone || "-"} />
                 <ProfileItem label="Joining date" value={formatDate(employee.joining_date)} />
+                <ProfileItem label="System entry date" value={formatDate(employee.system_entry_date)} />
+                <ProfileItem label="Off-day plan" value={{ weekly_friday: "Friday off every week", monthly_four: "Four days after one month (request dates)", bimonthly_eight: "Eight days after two months (request dates)", unspecified: "Not set" }[employee.attendance_schedule]} />
               </dl>
             </div>
 
