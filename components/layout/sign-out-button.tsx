@@ -3,6 +3,7 @@
 import { LogOut } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { disableBrowserPush } from "@/lib/push-client";
 
 export function SignOutButton({ label = "Sign Out" }: { label?: string }) {
   const router = useRouter();
@@ -13,6 +14,11 @@ export function SignOutButton({ label = "Sign Out" }: { label?: string }) {
     } catch (e: any) {
       alert(e.message || "Could not revoke session.");
       return; // Do not clear local session if server revocation fails
+    }
+    try {
+      await disableBrowserPush();
+    } catch {
+      // Sign out still proceeds if the browser or push endpoint is unavailable.
     }
     const supabase = createClient();
     await supabase.auth.signOut();

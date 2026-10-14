@@ -2,12 +2,14 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
 const invalidResetLinkMessage =
   "Your reset link is expired or invalid. Please request a new password reset link.";
 
 export function ResetPasswordForm() {
+  const router = useRouter();
   const initializedRef = useRef(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -99,7 +101,8 @@ export function ResetPasswordForm() {
     await supabase.auth.signOut();
     document.cookie = "bie_remember_me=; path=/; max-age=0; SameSite=Lax";
     window.setTimeout(() => {
-      window.location.assign("/login?message=password-updated");
+      router.push("/login?message=password-updated");
+      router.refresh();
     }, 1200);
   }
 

@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { ChevronDown, ChevronRight, LayoutDashboard, Menu, X } from "lucide-react";
 import { DepartmentBadges } from "@/components/common/department-badges";
 import { LanguageToggle } from "@/components/layout/language-toggle";
+import { NotificationBell } from "@/components/layout/notification-bell";
 import { SignOutButton } from "@/components/layout/sign-out-button";
 import { Avatar } from "@/components/ui/avatar";
 import type { Locale } from "@/lib/i18n";
@@ -222,7 +223,10 @@ export function AppShell({
 
       {/* Main Content Area */}
       <main className="px-4 py-5 lg:ms-72 lg:px-8 lg:py-8">
-        {headerWidget ? <div className="mb-5 hidden justify-end lg:flex">{headerWidget}</div> : null}
+        <div className="mb-5 flex justify-end gap-3">
+          {headerWidget ? <div className="hidden lg:block">{headerWidget}</div> : null}
+          <NotificationBell profileId={profile.id} />
+        </div>
         {children}
       </main>
     </div>

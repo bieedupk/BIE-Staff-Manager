@@ -80,7 +80,8 @@ export function DeviceAccessClient({
       if (!verifyResp.ok) throw new Error(verifyData.error || "Verification failed");
 
       // Success, redirect to dashboard
-      window.location.href = "/employee/dashboard";
+      router.push("/employee/dashboard");
+      router.refresh();
     } catch (e: unknown) {
       setError((e as Error).message);
     } finally {
