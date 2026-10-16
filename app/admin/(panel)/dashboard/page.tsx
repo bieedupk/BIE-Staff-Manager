@@ -91,13 +91,12 @@ export default async function AdminDashboardPage() {
   }).length;
 
   // Actual leave today (either marked as leave or has approved leave and no present record)
-  const leaveToday = activeEmployees.filter((employee) => {
+  const leaveToday = attendanceEligibleEmployees.filter((employee) => {
     const isLeave = approvedLeavesMap.get(employee.id)?.has(today);
-    const index = activeAttendanceToday.findIndex((a) => a.employee_id === employee.id);
-    if (index !== -1) {
-      return activeAttendanceFlags[index].isLeave || (isLeave && !activeAttendanceFlags[index].isPresent);
-    }
-    return isLeave;
+    const record = attendanceByEmployee.get(employee.id);
+    const hasWorked = Boolean(record?.check_in_at || record?.check_out_at || Number(record?.total_hours) > 0);
+    if (hasWorked || (record?.correction_count && record.status !== "Leave")) return false;
+    return Boolean(record?.status === "Leave" || isLeave || isNonWorkingDate(employee.id, today, settings));
   }).length;
 
   const missingToday = workingTodayEmployees.filter((employee) => {
@@ -135,7 +134,7 @@ export default async function AdminDashboardPage() {
         <StatCard label={t("presentToday", locale)} value={presentToday} href="/admin/attendance?status=present" icon={UserCheck} accent="emerald" animationDelay={150} />
         <StatCard label="Pending check-in" value={pendingToday} href="/admin/attendance?status=pending" icon={Clock} accent="blue" animationDelay={175} />
         <StatCard label={t("absentToday", locale)} value={absentToday} href="/admin/attendance?status=absent" icon={UserX} accent="red" animationDelay={200} />
-        <StatCard label="On Leave Today" value={leaveToday} href="/admin/attendance?status=leave" icon={CalendarClock} accent="slate" animationDelay={225} />
+        <StatCard label="On Leave Today" value={leaveToday} href={`/admin/attendance?status=leave&date=${today}`} icon={CalendarClock} accent="slate" animationDelay={225} />
         <StatCard label={t("lateToday", locale)} value={lateToday} href="/admin/attendance?status=late" icon={Clock} accent="amber" animationDelay={250} />
         <StatCard label="Half-day today" value={halfDayToday} href="/admin/attendance?status=half-day" icon={Timer} accent="orange" animationDelay={300} />
         <StatCard label="Reports submitted today" value={reportEmployees.size} href="/admin/daily-reports" icon={ClipboardCheck} accent="emerald" animationDelay={350} />
