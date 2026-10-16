@@ -1,15 +1,12 @@
 import { reviewLeave, updateLeaveDates, endLeaveNow } from "@/app/actions/leaves";
 import { EmptyState } from "@/components/ui/empty-state";
-import { LeaveTypeSummary } from "@/components/leave-type-summary";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { createClient } from "@/lib/supabase/server";
-import { getOrganizationSettings } from "@/lib/organization-settings";
-import { getApprovedLeaveYearSummary } from "@/lib/leave-year-summary";
 import { daysBetweenISO, rotationEligibilityDate, rotationPlan } from "@/lib/rotation-policy";
 import type { AttendanceSchedule, LeaveRequest } from "@/lib/types";
-import { formatDate, todayISOInTimezone } from "@/lib/utils";
+import { formatDate } from "@/lib/utils";
 
 type EmployeeProfileSummary = {
   id: string;
@@ -28,9 +25,6 @@ type RawLeaveRequest = Omit<LeaveRequest, "employee_profile"> & {
 
 export default async function AdminLeavesPage() {
   const supabase = await createClient();
-  const settings = await getOrganizationSettings();
-  const today = todayISOInTimezone(settings.timezone);
-  const year = Number(today.slice(0, 4));
   const { data, error } = await supabase
     .from("leave_requests")
     .select("*, employee_profile:profiles!leave_requests_employee_id_fkey(id, full_name, designation, department, department_id, attendance_schedule, system_entry_date, schedule_effective_from)")
@@ -62,8 +56,6 @@ export default async function AdminLeavesPage() {
     } as LeaveRequest;
   });
 
-  const leaveSummaryByEmployee = await getApprovedLeaveYearSummary(year, today);
-  const employeesWithRequests = new Map<string, string>(leaves.filter((leave) => leave.employee_profile).map((leave): [string, string] => [leave.employee_id, leave.employee_profile!.full_name]));
   const approvedRotation = new Map<string, LeaveRequest[]>();
   for (const leave of leaves) {
     if (leave.leave_type !== "Rotation Off" || leave.status !== "Approved") continue;
@@ -78,16 +70,6 @@ export default async function AdminLeavesPage() {
   return (
     <>
       <PageHeader title="Leave Requests" subtitle="Approve or reject leave requests and add an office comment." backHref="/admin/dashboard" />
-      {employeesWithRequests.size ? (
-        <section className="mb-5 grid gap-3">
-          {[...employeesWithRequests].sort((a, b) => a[1].localeCompare(b[1])).map(([employeeId, name]) => (
-            <article key={employeeId} className="rounded-lg border border-emerald-100 bg-white p-4 shadow-soft">
-              <h2 className="mb-2 font-extrabold text-slate-950">{name}</h2>
-              <LeaveTypeSummary year={year} counts={leaveSummaryByEmployee.get(employeeId) ?? []} />
-            </article>
-          ))}
-        </section>
-      ) : null}
       <section className="grid gap-4">
         {leaves.length ? (
           leaves.map((leave) => (
