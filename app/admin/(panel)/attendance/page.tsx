@@ -6,7 +6,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { deriveAttendanceFlags, formatDurationFromHours, getRecentAttendanceForAll, buildCompleteTimelineWithAbsent, getApprovedLeaveDates, createSyntheticFinalRecord } from "@/lib/attendance";
-import { isNonWorkingDate } from "@/lib/attendance-calendar";
+import { isNonWorkingDate, nonWorkingReason } from "@/lib/attendance-calendar";
 import { liveAttendancePhase } from "@/lib/live-attendance-phase";
 import { requireAdminProfile } from "@/lib/auth";
 import { departmentTextForProfile, fetchEmployeeDepartmentsByEmployee } from "@/lib/employee-departments";
@@ -135,6 +135,32 @@ export default async function AdminAttendancePage({ searchParams }: Props) {
     }
   }
 
+  // Scheduled days off appear in the leave filter without creating leave requests
+  // or attendance rows in the database.
+  const leaveDate = dateParamProvided ? selectedDate : today;
+  if (statusFilter === "leave" && leaveDate <= today) {
+    for (const employee of employees) {
+      if (employeeFilter && employee.id !== employeeFilter) continue;
+      if (employee.system_entry_date > leaveDate || (employee.joining_date && employee.joining_date > leaveDate)) continue;
+      if (!isNonWorkingDate(employee.id, leaveDate, settings)) continue;
+      if ((recordsByEmployee.get(employee.id) ?? []).some((record) =>
+        record.work_date === leaveDate && (record.check_in_at || record.check_out_at || Number(record.total_hours) > 0 || record.correction_count)
+      )) continue;
+      if (allRecords.some((record) => record.employee_id === employee.id && record.work_date === leaveDate)) continue;
+      allRecords.push(createSyntheticFinalRecord(employee.id, leaveDate, employee, "Leave"));
+    }
+  }
+
+  const { data: leaveDetails, error: leaveDetailsError } = statusFilter === "leave" && employees.length
+    ? await supabase.from("leave_requests")
+      .select("employee_id, from_date, to_date, leave_type, reason")
+      .eq("status", "Approved")
+      .in("employee_id", employees.map((employee) => employee.id))
+      .lte("from_date", fetchEndDate)
+      .gte("to_date", fetchStartDate)
+    : { data: [], error: null };
+  if (leaveDetailsError) throw new Error(`Could not load leave reasons: ${leaveDetailsError.message}`);
+
   allRecords.sort((a, b) => {
     const dateCmp = b.work_date.localeCompare(a.work_date);
     if (dateCmp !== 0) return dateCmp;
@@ -238,6 +264,12 @@ export default async function AdminAttendancePage({ searchParams }: Props) {
             {filteredAttendance.length ? (
               filteredAttendance.map((record) => {
                 const isApprovedLeave = approvedLeavesByEmployee.get(record.employee_id)?.has(record.work_date);
+                const approvedLeave = leaveDetails?.find((leave) =>
+                  leave.employee_id === record.employee_id && leave.from_date <= record.work_date && leave.to_date >= record.work_date
+                );
+                const leaveReason = approvedLeave
+                  ? `${approvedLeave.leave_type}${approvedLeave.reason ? `: ${approvedLeave.reason}` : ""}`
+                  : nonWorkingReason(record.employee_id, record.work_date, settings) ?? "Attendance marked as leave";
                 return (
                 <article key={record.id} className="rounded-lg border border-slate-200 p-3">
                   <div className="flex items-start justify-between gap-3">
@@ -248,6 +280,7 @@ export default async function AdminAttendancePage({ searchParams }: Props) {
                           ? `${departmentTextForProfile(record.profiles, assignmentsByEmployee)} | ${record.profiles.designation ?? "No designation"}`
                           : "Not assigned | No designation"}
                       </p>
+                      {statusFilter === "leave" && <p className="mt-1 text-sm font-semibold text-slate-700">Reason: {leaveReason}</p>}
                     </div>
                     <div className="flex flex-wrap justify-end gap-2">
                       {(record.work_date === today && record.check_in_at && attendanceFlagsByRecordId.get(record.id)?.isPending
@@ -277,7 +310,7 @@ export default async function AdminAttendancePage({ searchParams }: Props) {
                       <p>{formatWorkedDuration(record.total_hours)}</p>
                     </div>
                   </dl>
-                   {canCorrectAttendance && !isApprovedLeave && !(isSyntheticFinalRecord(record) && record.work_date === today && !isDutyEndedForDate(today, settings)) ? (
+                   {canCorrectAttendance && !isApprovedLeave && !(isSyntheticFinalRecord(record) && isNonWorkingDate(record.employee_id, record.work_date, settings)) && !(isSyntheticFinalRecord(record) && record.work_date === today && !isDutyEndedForDate(today, settings)) ? (
                     (record.correction_count || 0) >= 2 ? (
                       <div className="mt-3 border-t border-slate-100 pt-3 text-sm font-semibold text-slate-500">
                         Correction limit reached
