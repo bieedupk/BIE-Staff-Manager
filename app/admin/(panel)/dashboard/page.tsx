@@ -129,8 +129,8 @@ export default async function AdminDashboardPage() {
         </div>
       </section>
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="Active employees" value={activeEmployeeCount} href="/admin/employees" icon={UserCheck} accent="emerald" animationDelay={50} />
-        <StatCard label="Total staff records" value={staffRecords.length} href="/admin/employees" icon={UsersRound} accent="slate" animationDelay={100} />
+        <StatCard label="Total staff records" value={staffRecords.length} href="/admin/employees" icon={UsersRound} accent="slate" animationDelay={50} />
+        <StatCard label="Active employees" value={activeEmployeeCount} href="/admin/employees" icon={UserCheck} accent="emerald" animationDelay={100} />
         <StatCard label={t("presentToday", locale)} value={presentToday} href="/admin/attendance?status=present" icon={UserCheck} accent="emerald" animationDelay={150} />
         <StatCard label="Pending check-in" value={pendingToday} href="/admin/attendance?status=pending" icon={Clock} accent="blue" animationDelay={175} />
         <StatCard label={t("absentToday", locale)} value={absentToday} href="/admin/attendance?status=absent" icon={UserX} accent="red" animationDelay={200} />
