@@ -711,17 +711,42 @@ export async function setEmployeeStatus(formData: FormData) {
   redirectEmployeeStatus(success ? "success" : "error", success ? "Employee status updated successfully." : errorMessage);
 }
 
+function departmentKey(name: string) {
+  const normalized = name.trim().replace(/\s+/g, " ").toLowerCase();
+  const aliases: Record<string, string> = {
+    it: "information technology (it)",
+    "information technology": "information technology (it)",
+    admission: "admissions & registration",
+    admissions: "admissions & registration",
+    examination: "examinations",
+    dispatch: "mail & dispatch",
+    curriculum: "syllabus"
+  };
+  return aliases[normalized] ?? normalized;
+}
+
+async function assertUniqueDepartmentName(admin: ReturnType<typeof createAdminClient>, name: string, currentId?: string) {
+  const { data, error } = await admin.from("departments").select("id, name, is_active");
+  if (error) throw new Error("Department names could not be checked.");
+  const duplicate = (data ?? []).find((department) => department.id !== currentId && (!currentId || department.is_active) && departmentKey(department.name) === departmentKey(name));
+  if (duplicate) throw new Error(`This department already exists as ${duplicate.name}. Use the existing entry.`);
+}
+
 export async function createDepartment(formData: FormData) {
   const currentProfile = await requireAdminProfile();
   requireAdminManager(currentProfile.role);
 
-  const supabase = await createClient();
-  const { error } = await supabase.from("departments").insert({
-    name: String(formData.get("name") || "").trim()
-  });
+  const name = String(formData.get("name") || "").trim();
+  if (!name) throw new Error("Department name is required.");
+  const admin = createAdminClient();
+  await assertUniqueDepartmentName(admin, name);
+  const { data: department, error } = await admin.from("departments").insert({ name }).select("id").single();
   if (error) throw new Error(error.message);
 
-  await logAudit("department created", "departments", null, { name: formData.get("name") }, { actorId: currentProfile.id });
+  const { error: auditError } = await admin.from("audit_logs").insert({
+    actor_id: currentProfile.id, action: "department created", entity_type: "departments", entity_id: department.id, details: { name }
+  });
+  if (auditError) throw new Error("Department was created, but its audit log could not be recorded. Check the department list before retrying.");
   revalidatePath("/admin/departments");
 }
 
@@ -730,16 +755,26 @@ export async function updateDepartment(formData: FormData) {
   requireAdminManager(currentProfile.role);
 
   const id = String(formData.get("id"));
-  const supabase = await createClient();
-  const { error } = await supabase
+  const name = String(formData.get("name") || "").trim();
+  if (!name) throw new Error("Department name is required.");
+  const admin = createAdminClient();
+  const isActive = formData.get("is_active") === "on";
+  if (isActive) await assertUniqueDepartmentName(admin, name, id);
+  const { data: department, error } = await admin
     .from("departments")
     .update({
-      name: String(formData.get("name") || "").trim(),
-      is_active: formData.get("is_active") === "on"
+      name,
+      is_active: isActive
     })
-    .eq("id", id);
+    .eq("id", id)
+    .select("id")
+    .maybeSingle();
   if (error) throw new Error(error.message);
+  if (!department) throw new Error("Department not found.");
 
-  await logAudit("department edited", "departments", id, undefined, { actorId: currentProfile.id });
+  const { error: auditError } = await admin.from("audit_logs").insert({
+    actor_id: currentProfile.id, action: "department edited", entity_type: "departments", entity_id: id, details: { name }
+  });
+  if (auditError) throw new Error("Department was updated, but its audit log could not be recorded. Check the department list before retrying.");
   revalidatePath("/admin/departments");
 }

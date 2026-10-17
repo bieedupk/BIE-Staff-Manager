@@ -3,13 +3,14 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { requireAdminManagerProfile } from "@/lib/auth";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import type { Department } from "@/lib/types";
 
 export default async function AdminDepartmentsPage() {
   await requireAdminManagerProfile();
-  const supabase = await createClient();
-  const { data } = await supabase.from("departments").select("*").order("sort_order", { ascending: true, nullsFirst: false }).order("name");
+  const admin = createAdminClient();
+  const { data, error } = await admin.from("departments").select("*").order("sort_order", { ascending: true, nullsFirst: false }).order("name");
+  if (error) throw new Error("Departments could not be loaded.");
   const departments = (data ?? []) as Department[];
   const activeDepartments = departments.filter((department) => department.is_active);
   const inactiveDepartments = departments.filter((department) => !department.is_active);
