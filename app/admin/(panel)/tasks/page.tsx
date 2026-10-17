@@ -1,30 +1,37 @@
 import { assignTask } from "@/app/actions/tasks";
+import { TaskRecipientPicker } from "@/components/admin/task-recipient-picker";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { SubmitButton } from "@/components/ui/submit-button";
+import { requireAdminProfile } from "@/lib/auth";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
-import type { Department, Profile, Task, TaskPriority, TaskStatus } from "@/lib/types";
-import { formatDate, todayISO } from "@/lib/utils";
+import type { Profile, Task, TaskPriority, TaskStatus } from "@/lib/types";
+import { formatDate, isAdminManagerRole, todayISO } from "@/lib/utils";
 
 const priorities: TaskPriority[] = ["Low", "Medium", "High", "Urgent"];
 const buckets: (TaskStatus | "Overdue")[] = ["Pending", "In Progress", "Completed", "Overdue"];
 
 export default async function AdminTasksPage() {
+  const profile = await requireAdminProfile();
   const supabase = await createClient();
+  const admin = createAdminClient();
   const today = todayISO();
-  const [{ data: tasks }, { data: employees }, { data: departments }] = await Promise.all([
-    supabase
+  const employeeQuery = admin.from("profiles").select("*").eq("role", "employee").eq("status", "active").order("full_name");
+  if (!isAdminManagerRole(profile.role)) employeeQuery.eq("supervisor_id", profile.id);
+  const taskSource = isAdminManagerRole(profile.role) ? admin : supabase;
+  const [{ data: tasks, error: tasksError }, { data: employees, error: employeesError }] = await Promise.all([
+    taskSource
       .from("tasks")
       .select("*, assignee:profiles!tasks_assigned_to_fkey(full_name, department), assigner:profiles!tasks_assigned_by_fkey(full_name)")
       .order("created_at", { ascending: false }),
-    supabase.from("profiles").select("*").eq("role", "employee").eq("status", "active").order("full_name"),
-    supabase.from("departments").select("*").eq("is_active", true).order("sort_order", { ascending: true, nullsFirst: false }).order("name")
+    employeeQuery
   ]);
 
   const taskList = (tasks ?? []) as Task[];
   const staff = (employees ?? []) as Profile[];
-  const departmentList = (departments ?? []) as Department[];
+  const canAssign = !employeesError && staff.length > 0;
 
   function taskBucket(status: TaskStatus | "Overdue") {
     if (status === "Overdue") {
@@ -43,18 +50,15 @@ export default async function AdminTasksPage() {
 
       <section className="rounded-lg border border-emerald-100 bg-white p-4 shadow-soft">
         <h2 className="font-extrabold text-slate-950">Assign Task</h2>
+        {employeesError ? <p role="alert" className="mt-3 rounded-lg bg-red-50 p-3 text-sm font-semibold text-red-800">Employees could not be loaded. Please refresh the page.</p> : null}
+        {!employeesError && staff.length === 0 ? <p className="mt-3 text-sm text-slate-600">There are no active employees available to assign.</p> : null}
         <form action={assignTask} className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           <Input name="title" label="Title" required />
-          <label className="grid gap-1 text-sm font-bold text-slate-700">
-            Assigned employee
-            <select name="assigned_to" required className="min-h-11 rounded-lg border border-slate-300 px-3">
-              {staff.map((employee) => (
-                <option key={employee.id} value={employee.id}>
-                  {employee.full_name}
-                </option>
-              ))}
-            </select>
-          </label>
+          <TaskRecipientPicker
+            employees={staff.map((employee) => ({ id: employee.id, name: employee.full_name }))}
+            allowAll={isAdminManagerRole(profile.role)}
+            disabled={!canAssign}
+          />
           <Input name="due_date" label="Due date" type="date" required />
           <label className="grid gap-1 text-sm font-bold text-slate-700">
             Priority
@@ -66,22 +70,12 @@ export default async function AdminTasksPage() {
               ))}
             </select>
           </label>
-          <label className="grid gap-1 text-sm font-bold text-slate-700">
-            Department
-            <select name="department" className="min-h-11 rounded-lg border border-slate-300 px-3">
-              {departmentList.map((department) => (
-                <option key={department.id} value={department.name}>
-                  {department.name}
-                </option>
-              ))}
-            </select>
-          </label>
           <label className="grid gap-1 text-sm font-bold text-slate-700 md:col-span-2 xl:col-span-3">
             Description
             <textarea name="description" required className="rounded-lg border border-slate-300 px-3 py-2" />
           </label>
           <div className="md:col-span-2 xl:col-span-3">
-            <SubmitButton pendingText="Assigning task..." className="min-h-11 rounded-lg bg-bie-700 px-4 font-extrabold text-white transition hover:bg-bie-800 disabled:opacity-50">
+            <SubmitButton disabled={!canAssign} pendingText="Assigning task..." className="min-h-11 rounded-lg bg-bie-700 px-4 font-extrabold text-white transition hover:bg-bie-800 disabled:opacity-50">
               Assign task
             </SubmitButton>
           </div>
@@ -89,7 +83,8 @@ export default async function AdminTasksPage() {
       </section>
 
       <section className="mt-5 grid gap-5 xl:grid-cols-2">
-        {buckets.map((bucket) => {
+        {tasksError ? <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm font-semibold text-red-800 xl:col-span-2">Tasks could not be loaded. Please refresh the page.</p> : null}
+        {!tasksError ? buckets.map((bucket) => {
           const list = taskBucket(bucket);
           return (
             <div key={bucket} className="rounded-lg border border-emerald-100 bg-white p-4 shadow-soft">
@@ -103,7 +98,7 @@ export default async function AdminTasksPage() {
               </div>
             </div>
           );
-        })}
+        }) : null}
       </section>
     </>
   );
